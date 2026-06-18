@@ -12,11 +12,13 @@
 
 use std::path::PathBuf;
 
+use iced::font::Weight;
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::widget::{
-    Column, Row, button, column, container, pick_list, row, scrollable, text, text_input,
+    Column, Row, button, column, container, mouse_area, pick_list, row, scrollable, text,
+    text_input,
 };
-use iced::{Element, Length, Task, Theme};
+use iced::{Background, Border, Element, Font, Length, Subscription, Task, Theme};
 
 use match_report_analyzer::query::{Combinator, Condition, FilterBuilder, Operator};
 use match_report_analyzer::store::{DataStore, QueryResult, TABLE, quote_ident};
@@ -26,11 +28,17 @@ use match_report_analyzer::store::{DataStore, QueryResult, TABLE, quote_ident};
 /// bar reports how many matched in total.
 const ROW_DISPLAY_CAP: usize = 500;
 
-const COLUMN_WIDTH: f32 = 180.0;
+/// Default width of a grid column, in pixels.
+const DEFAULT_COLUMN_WIDTH: f32 = 180.0;
+/// Smallest width a column can be dragged down to.
+const MIN_COLUMN_WIDTH: f32 = 56.0;
+/// Width of the draggable resize handle at each column's right edge.
+const GRIP_WIDTH: f32 = 6.0;
 const CELL_CHAR_CAP: usize = 48;
 
 fn main() -> iced::Result {
     iced::application(App::title, App::update, App::view)
+        .subscription(App::subscription)
         .theme(|_| Theme::Dark)
         .run()
 }
@@ -66,6 +74,16 @@ impl SortDir {
     }
 }
 
+/// An in-progress column-resize drag. `anchor_x` is the cursor x recorded on
+/// the first move after the grip was pressed; widths are computed relative to it
+/// so the drag never drifts.
+#[derive(Debug, Clone, Copy)]
+struct ResizeState {
+    index: usize,
+    start_width: f32,
+    anchor_x: Option<f32>,
+}
+
 /// Status line content shown beneath the toolbar.
 #[derive(Debug, Clone, Default)]
 enum Status {
@@ -87,6 +105,10 @@ struct App {
     sort: Option<(String, SortDir)>,
     result: QueryResult,
     status: Status,
+    /// Per-column widths, parallel to `result.columns`.
+    column_widths: Vec<f32>,
+    /// Set while a column header's resize handle is being dragged.
+    resizing: Option<ResizeState>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +126,9 @@ enum Message {
     RawSqlChanged(String),
     RunRawSql,
     SortBy(String),
+    ResizeStarted(usize),
+    CursorMoved(f32),
+    ResizeReleased,
 }
 
 impl App {
@@ -155,8 +180,51 @@ impl App {
                 };
                 self.run_query();
             }
+            Message::ResizeStarted(i) => {
+                let start_width = self
+                    .column_widths
+                    .get(i)
+                    .copied()
+                    .unwrap_or(DEFAULT_COLUMN_WIDTH);
+                self.resizing = Some(ResizeState {
+                    index: i,
+                    start_width,
+                    anchor_x: None,
+                });
+            }
+            Message::CursorMoved(x) => {
+                if let Some(state) = &mut self.resizing {
+                    match state.anchor_x {
+                        None => state.anchor_x = Some(x),
+                        Some(anchor) => {
+                            if let Some(width) = self.column_widths.get_mut(state.index) {
+                                *width = (state.start_width + (x - anchor)).max(MIN_COLUMN_WIDTH);
+                            }
+                        }
+                    }
+                }
+            }
+            Message::ResizeReleased => self.resizing = None,
         }
         Task::none()
+    }
+
+    /// While a resize drag is active, listen for cursor movement (to update the
+    /// column width live) and the mouse-button release (to end the drag). When
+    /// idle there is no listener, so we don't process every cursor move.
+    fn subscription(&self) -> Subscription<Message> {
+        if self.resizing.is_none() {
+            return Subscription::none();
+        }
+        iced::event::listen_with(|event, _status, _id| match event {
+            iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+                Some(Message::CursorMoved(position.x))
+            }
+            iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+                Some(Message::ResizeReleased)
+            }
+            _ => None,
+        })
     }
 
     /// Load a CSV file into a fresh store and run the default query.
@@ -199,9 +267,19 @@ impl App {
             Ok(result) => {
                 let matched = result.rows.len();
                 self.result = result;
+                self.sync_column_widths();
                 self.status = Status::Info(format!("{matched} of {} rows", self.total_rows));
             }
             Err(e) => self.status = Status::Error(e.to_string()),
+        }
+    }
+
+    /// Ensure there is one width per result column. Existing widths are kept
+    /// when the column count is unchanged (e.g. filtering/sorting a `SELECT *`),
+    /// and reset to the default when the shape changes (e.g. a new raw query).
+    fn sync_column_widths(&mut self) {
+        if self.column_widths.len() != self.result.columns.len() {
+            self.column_widths = vec![DEFAULT_COLUMN_WIDTH; self.result.columns.len()];
         }
     }
 
@@ -354,49 +432,73 @@ impl App {
         }
 
         let sortable = matches!(self.tab, Tab::Builder);
+
+        // Header row: each cell is the (optionally clickable) label plus a thin
+        // draggable handle pinned to its right edge.
         let mut header_cells: Vec<Element<'_, Message>> = Vec::new();
-        for name in &self.result.columns {
+        for (i, name) in self.result.columns.iter().enumerate() {
+            let width = self.column_width(i);
             let indicator = match &self.sort {
                 Some((c, dir)) if c == name => dir.indicator(),
                 _ => "",
             };
-            let label = format!("{name}{indicator}");
-            let cell: Element<'_, Message> = if sortable {
-                button(text(label).size(13))
+            let label = text(format!("{name}{indicator}")).size(13).font(BOLD);
+
+            let label_widget: Element<'_, Message> = if sortable {
+                button(label)
                     .on_press(Message::SortBy(name.clone()))
                     .style(button::text)
-                    .width(Length::Fixed(COLUMN_WIDTH))
+                    .width(Length::Fill)
                     .into()
             } else {
-                container(text(label).size(13))
-                    .width(Length::Fixed(COLUMN_WIDTH))
-                    .padding([4, 8])
-                    .into()
+                container(label).padding([4, 8]).width(Length::Fill).into()
             };
-            header_cells.push(cell);
+
+            let grip = mouse_area(
+                container(text(""))
+                    .width(Length::Fixed(GRIP_WIDTH))
+                    .height(Length::Fill)
+                    .style(grip_style),
+            )
+            .on_press(Message::ResizeStarted(i));
+
+            let cell = container(
+                row![label_widget, grip]
+                    .width(Length::Fill)
+                    .align_y(iced::Alignment::Center),
+            )
+            .width(Length::Fixed(width))
+            .style(header_style);
+
+            header_cells.push(cell.into());
         }
         let header = Row::with_children(header_cells);
 
         let mut body_rows: Vec<Element<'_, Message>> = Vec::new();
-        for record in self.result.rows.iter().take(ROW_DISPLAY_CAP) {
+        for (r, record) in self.result.rows.iter().take(ROW_DISPLAY_CAP).enumerate() {
             let cells: Vec<Element<'_, Message>> = record
                 .iter()
-                .map(|value| {
+                .enumerate()
+                .map(|(i, value)| {
                     container(text(truncate(value)).size(12))
-                        .width(Length::Fixed(COLUMN_WIDTH))
+                        .width(Length::Fixed(self.column_width(i)))
                         .padding([3, 8])
                         .into()
                 })
                 .collect();
-            body_rows.push(Row::with_children(cells).into());
+            let striped = r % 2 == 1;
+            body_rows.push(
+                container(Row::with_children(cells))
+                    .style(move |theme| row_style(theme, striped))
+                    .into(),
+            );
         }
 
         let table = Column::with_children(
             std::iter::once(Element::from(header))
                 .chain(body_rows)
                 .collect::<Vec<_>>(),
-        )
-        .spacing(2);
+        );
 
         scrollable(table)
             .direction(Direction::Both {
@@ -405,6 +507,58 @@ impl App {
             })
             .height(Length::Fill)
             .into()
+    }
+
+    /// Current width for the column at `index`, defaulting if not yet sized.
+    fn column_width(&self, index: usize) -> f32 {
+        self.column_widths
+            .get(index)
+            .copied()
+            .unwrap_or(DEFAULT_COLUMN_WIDTH)
+    }
+}
+
+/// Bold font used for the grid header labels.
+const BOLD: Font = Font {
+    weight: Weight::Bold,
+    ..Font::DEFAULT
+};
+
+/// Distinct background + border for header cells, so the header reads clearly
+/// apart from the data rows.
+fn header_style(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+    container::Style {
+        background: Some(Background::Color(palette.background.strong.color)),
+        text_color: Some(palette.background.strong.text),
+        border: Border {
+            color: palette.background.weak.color,
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// Accent fill for the draggable resize handle.
+fn grip_style(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+    container::Style {
+        background: Some(Background::Color(palette.primary.strong.color)),
+        ..container::Style::default()
+    }
+}
+
+/// Subtle zebra striping for alternate data rows.
+fn row_style(theme: &Theme, striped: bool) -> container::Style {
+    if striped {
+        let palette = theme.extended_palette();
+        container::Style {
+            background: Some(Background::Color(palette.background.weak.color)),
+            ..container::Style::default()
+        }
+    } else {
+        container::Style::default()
     }
 }
 
