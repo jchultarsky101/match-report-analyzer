@@ -64,7 +64,8 @@ Packaged installers (`.dmg` / `.msi`) are planned for tagged releases.
 Launch the app:
 
 ```sh
-cargo run --release        # during development
+cargo run --release                      # during development
+cargo run --release -- path/to/report.csv  # open a file on startup
 # or run the built binary directly
 ```
 

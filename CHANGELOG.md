@@ -12,8 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guide, code of conduct, CI workflow, and editor/formatting configuration.
 - Native desktop GUI built with the [Iced](https://iced.rs/) toolkit, targeting
   macOS and Windows.
-- Open a match-report CSV via a native file picker; data is loaded read-only
-  into an in-memory SQLite database with automatic column-type inference.
+- Open a match-report CSV via a native file picker, or by passing a path as the
+  first command-line argument; data is loaded read-only into an in-memory SQLite
+  database with automatic column-type inference.
 - Read-only result grid with click-to-sort column headers, a visually distinct
   (bold, shaded, bordered) header row, zebra-striped data rows, and
   drag-to-resize column widths.

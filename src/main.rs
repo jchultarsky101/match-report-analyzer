@@ -34,13 +34,16 @@ const DEFAULT_COLUMN_WIDTH: f32 = 180.0;
 const MIN_COLUMN_WIDTH: f32 = 56.0;
 /// Width of the draggable resize handle at each column's right edge.
 const GRIP_WIDTH: f32 = 6.0;
+/// Fixed height of the header row. Must not be `Fill`: the table lives inside a
+/// vertical scrollable, whose content may not fill the scrolling axis.
+const HEADER_HEIGHT: f32 = 32.0;
 const CELL_CHAR_CAP: usize = 48;
 
 fn main() -> iced::Result {
     iced::application(App::title, App::update, App::view)
         .subscription(App::subscription)
         .theme(|_| Theme::Dark)
-        .run()
+        .run_with(App::new)
 }
 
 /// Which query-authoring tab is active.
@@ -132,6 +135,16 @@ enum Message {
 }
 
 impl App {
+    /// Build the initial state, optionally opening a CSV path passed as the
+    /// first command-line argument (e.g. `match-report-analyzer report.csv`).
+    fn new() -> (Self, Task<Message>) {
+        let mut app = App::default();
+        if let Some(path) = std::env::args_os().nth(1) {
+            app.load_file(PathBuf::from(path));
+        }
+        (app, Task::none())
+    }
+
     fn title(&self) -> String {
         match &self.file_name {
             Some(name) => format!("Match Report Analyzer — {name}"),
@@ -457,7 +470,7 @@ impl App {
             let grip = mouse_area(
                 container(text(""))
                     .width(Length::Fixed(GRIP_WIDTH))
-                    .height(Length::Fill)
+                    .height(Length::Fixed(HEADER_HEIGHT))
                     .style(grip_style),
             )
             .on_press(Message::ResizeStarted(i));
@@ -468,6 +481,7 @@ impl App {
                     .align_y(iced::Alignment::Center),
             )
             .width(Length::Fixed(width))
+            .height(Length::Fixed(HEADER_HEIGHT))
             .style(header_style);
 
             header_cells.push(cell.into());
