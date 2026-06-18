@@ -3,24 +3,28 @@
 [![CI](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-A command-line tool for analyzing [Physna](https://www.physna.com/) geometric
-**match-report** CSV exports — the reports that pair a *reference* asset with one
-or more *candidate* assets and score how geometrically similar they are.
+A cross-platform **native desktop application** for analyzing
+[Physna](https://www.physna.com/) geometric **match-report** CSV exports — the
+reports that pair a *reference* asset with one or more *candidate* assets and
+score how geometrically similar they are.
 
 It helps you turn a raw export into answers: which parts are likely duplicates,
 which candidates clear a similarity threshold, and how matches are distributed
 across folders, file types, and cost.
 
-> **Status:** early development (`0.1.0`). The CLI surface and output formats are
-> not yet stable.
+Built in Rust with the [Iced](https://iced.rs/) GUI toolkit, it runs as a single
+native binary on **macOS** and **Windows** (and Linux).
+
+> **Status:** early development (`0.1.0`). The UI and feature set are not yet
+> stable.
 
 ## Why
 
 A match report can contain thousands of reference/candidate pairs with columns
 for match percentage, asset paths, units, file types, folders, owners, file
 size, cost, supplier, and a deep-link comparison URL. Reading that by hand in a
-spreadsheet is slow. This tool parses the export and lets you filter, sort, and
-summarize it from the terminal or in scripts.
+spreadsheet is slow. This app loads the export and lets you filter, sort, and
+summarize it through a point-and-click interface.
 
 ### Input format
 
@@ -47,18 +51,26 @@ Requires a recent Rust toolchain (edition 2024, Rust **1.85+**). Install via
 git clone https://github.com/jchultarsky101/match-report-analyzer.git
 cd match-report-analyzer
 cargo build --release
-# Binary at ./target/release/match-report-analyzer
+# Binary at ./target/release/match-report-analyzer (.exe on Windows)
 ```
+
+> Iced renders with wgpu, so a GPU with a working Vulkan/Metal/DX12 driver is
+> recommended. On platforms without one it falls back to software rendering.
+
+Packaged installers (`.dmg` / `.msi`) are planned for tagged releases.
 
 ## Usage
 
+Launch the app:
+
 ```sh
-match-report-analyzer --help
+cargo run --release        # during development
+# or run the built binary directly
 ```
 
-> The command surface is still being designed. Once stabilized, examples such as
-> summarizing a report and filtering by a similarity threshold will be documented
-> here.
+Then use **Open report…** to load a Physna match-report CSV. The UI for
+filtering, sorting, and summarizing is under active development and will be
+documented here as it lands.
 
 ## Development
 
