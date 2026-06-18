@@ -1,0 +1,14 @@
+# Rust build artifacts
+/target
+
+# Local sample/test data — not distributed with the repo.
+# The directory itself is kept (via its README), but its contents are ignored.
+/data/*
+!/data/README.md
+
+# macOS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*.iml

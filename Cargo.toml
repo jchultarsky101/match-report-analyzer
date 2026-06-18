@@ -1,0 +1,21 @@
+[package]
+name = "match-report-analyzer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Analyze Physna geometric match-report CSV exports — summarize, filter, and surface duplicate or similar parts."
+authors = ["Julian Chultarsky <jchultarsky@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jchultarsky101/match-report-analyzer"
+homepage = "https://github.com/jchultarsky101/match-report-analyzer"
+documentation = "https://docs.rs/match-report-analyzer"
+readme = "README.md"
+keywords = ["physna", "csv", "cad", "geometric-search", "analysis"]
+categories = ["command-line-utilities", "parsing"]
+exclude = ["/data", "/.github"]
+
+[dependencies]
+
+[profile.release]
+lto = true
+strip = true
