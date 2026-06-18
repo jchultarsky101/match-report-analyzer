@@ -15,7 +15,11 @@ categories = ["gui", "visualization"]
 exclude = ["/data", "/.github"]
 
 [dependencies]
+anyhow = "1.0.102"
+csv = "1.4.0"
 iced = "0.13.1"
+rfd = "0.17.2"
+rusqlite = { version = "0.40.1", features = ["bundled"] }
 
 [profile.release]
 lto = true

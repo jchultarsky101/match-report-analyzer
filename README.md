@@ -68,9 +68,43 @@ cargo run --release        # during development
 # or run the built binary directly
 ```
 
-Then use **Open report…** to load a Physna match-report CSV. The UI for
-filtering, sorting, and summarizing is under active development and will be
-documented here as it lands.
+Then:
+
+1. **Open report…** loads a Physna match-report CSV. It is parsed into an
+   in-memory table (the source file is never modified) with column types
+   inferred automatically, so numeric columns like `MATCH_PERCENTAGE` compare
+   numerically.
+2. The data appears in a **read-only, sortable grid** — click a column header in
+   *Filter builder* mode to sort by it (toggles ascending → descending → off).
+3. Narrow the data two ways, both feeding the same grid:
+   - **Filter builder** — add point-and-click conditions
+     (`column` · `operator` · `value`) combined with **AND**/**OR**.
+   - **SQL** — type a query directly against the `report` table.
+
+For example, "geometric match above 80% but below 99% **and** Material is Steel"
+is either three builder conditions, or:
+
+```sql
+SELECT * FROM report
+WHERE MATCH_PERCENTAGE > 80 AND MATCH_PERCENTAGE < 99 AND Material = 'Steel';
+```
+
+> Column names with spaces or symbols (e.g. `REF__COST_($)`) must be wrapped in
+> double quotes in raw SQL. The grid currently renders up to the first 500
+> matching rows for responsiveness; the status bar reports the full match count.
+
+## Architecture
+
+The crate is split into a thin GUI binary over a testable library:
+
+- `src/store.rs` — loads the CSV into an in-memory **SQLite** database
+  ([`rusqlite`](https://crates.io/crates/rusqlite)) and runs read-only queries.
+- `src/query.rs` — the structured filter model, compiled to a SQL `WHERE` clause.
+- `src/main.rs` — the [Iced](https://iced.rs/) application: toolbar, query tabs,
+  and result grid.
+
+Both the filter builder and the raw SQL box compile to SQL executed against the
+same table, so there is a single query path.
 
 ## Development
 
