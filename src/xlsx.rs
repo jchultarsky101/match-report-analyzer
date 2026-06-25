@@ -15,7 +15,7 @@ use rust_xlsxwriter::{
 use tracing::{debug, info};
 
 use crate::error::AppError;
-use crate::report::{CellState, MATCH_PERCENTAGE_COLUMN, Report};
+use crate::report::{CellState, MATCH_PERCENTAGE_COLUMN, Report, Schema};
 
 /// Background color for cells whose reference and candidate values differ.
 /// Excel's standard "bad" red fill.
@@ -75,25 +75,26 @@ pub struct ConversionStats {
 /// the reference and candidate metadata differ and applying a heat-map gradient
 /// to the match-percentage column.
 pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats, AppError> {
-    // Top "group" band over each pair, and unpaired column headers (which span
-    // both header rows).
-    let group_format = Format::new()
+    // Pair band (top header row over each pair): medium top/left/right border to
+    // begin the box drawn around the pair, thin bottom against the sub-labels.
+    let band_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color(COLOR_HEADER_BG)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
+        .set_border_top(FormatBorder::Medium)
+        .set_border_left(FormatBorder::Medium)
+        .set_border_right(FormatBorder::Medium)
+        .set_border_bottom(FormatBorder::Thin);
+    // Unpaired column headers span both header rows with a plain thin border.
+    let unpaired_header_format = Format::new()
         .set_bold()
         .set_font_color(Color::White)
         .set_background_color(COLOR_HEADER_BG)
         .set_align(FormatAlign::Center)
         .set_align(FormatAlign::VerticalCenter)
         .set_border(FormatBorder::Thin);
-    // Second header row: the per-column REF / CAN sub-labels.
-    let label_format = Format::new()
-        .set_bold()
-        .set_font_color(Color::White)
-        .set_background_color(COLOR_SUBHEADER_BG)
-        .set_align(FormatAlign::Center)
-        .set_align(FormatAlign::VerticalCenter)
-        .set_border(FormatBorder::Thin);
-    let different_format = Format::new().set_background_color(COLOR_DIFFERENT);
-    let missing_format = Format::new().set_background_color(COLOR_MISSING);
     let percent_format = Format::new().set_num_format(PERCENT_NUM_FORMAT);
 
     let mut workbook = Workbook::new();
@@ -115,9 +116,10 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
 
     // Two-row header. The top row carries a merged "group" band showing each
     // pair's field name once (e.g. `XUNITS` over `REF_XUNITS`/`CAN_XUNITS`); the
-    // second row carries the per-column `REF`/`CAN` sub-labels. Unpaired columns
-    // span both rows. This makes the `REF_`/`CAN_` pairs easy to see and is
-    // never obscured by the data highlights.
+    // second row carries the per-column `REF`/`CAN` sub-labels. Each pair is
+    // framed by a medium box (started here on the band and sub-labels, continued
+    // down through the data rows below). Unpaired columns span both rows. The
+    // grouping lives in the header, so it is never obscured by data highlights.
     let headers = schema.headers();
     let mut col = 0usize;
     while col < schema.column_count() {
@@ -132,19 +134,19 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
                     GROUP_HEADER_ROW,
                     (col + 1) as u16,
                     field,
-                    &group_format,
+                    &band_format,
                 )?;
                 worksheet.write_with_format(
                     LABEL_HEADER_ROW,
                     col as u16,
                     side_label(&headers[col]),
-                    &label_format,
+                    &pair_label_format(true),
                 )?;
                 worksheet.write_with_format(
                     LABEL_HEADER_ROW,
                     (col + 1) as u16,
                     side_label(&headers[col + 1]),
-                    &label_format,
+                    &pair_label_format(false),
                 )?;
                 col += 2;
             }
@@ -157,7 +159,7 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
                     LABEL_HEADER_ROW,
                     col as u16,
                     &headers[col],
-                    &group_format,
+                    &unpaired_header_format,
                 )?;
                 col += 1;
             }
@@ -167,8 +169,10 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     worksheet.set_row_height(LABEL_HEADER_ROW, HEADER_ROW_HEIGHT)?;
 
     // Data rows follow the two header rows.
+    let last_data_index = report.rows.len().saturating_sub(1);
     for (row_idx, record) in report.rows.iter().enumerate() {
         let excel_row = row_idx as u32 + DATA_START_ROW;
+        let is_last_row = row_idx == last_data_index;
         for col in 0..schema.column_count() {
             let value = record.get(col).map(String::as_str).unwrap_or("");
 
@@ -196,17 +200,23 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
                 continue;
             }
 
-            match report.cell_state(row_idx, col) {
-                CellState::Equal => {
+            let state = report.cell_state(row_idx, col);
+            match state {
+                CellState::Different => stats.different += 1,
+                CellState::Missing => stats.missing += 1,
+                CellState::Equal => {}
+            }
+
+            // Box edges: the pair's outer columns get medium left/right borders,
+            // and the last data row closes the box with a medium bottom border.
+            let (left_edge, right_edge) = pair_edges(schema, col);
+            let bottom_edge = is_last_row && (left_edge || right_edge);
+            match data_cell_format(state, left_edge, right_edge, bottom_edge) {
+                Some(format) => {
+                    worksheet.write_with_format(excel_row, col as u16, value, &format)?;
+                }
+                None => {
                     worksheet.write(excel_row, col as u16, value)?;
-                }
-                CellState::Different => {
-                    worksheet.write_with_format(excel_row, col as u16, value, &different_format)?;
-                    stats.different += 1;
-                }
-                CellState::Missing => {
-                    worksheet.write_with_format(excel_row, col as u16, value, &missing_format)?;
-                    stats.missing += 1;
                 }
             }
         }
@@ -271,6 +281,59 @@ fn side_label(header: &str) -> &'static str {
     }
 }
 
+/// Which box edges a column sits on: `(left, right)`. The left member of an
+/// adjacent pair gets a left edge; the right member a right edge. Unpaired or
+/// non-adjacent columns get neither.
+fn pair_edges(schema: &Schema, col: usize) -> (bool, bool) {
+    match schema.partner(col) {
+        Some(partner) if partner == col + 1 => (true, false),
+        Some(partner) if col > 0 && partner == col - 1 => (false, true),
+        _ => (false, false),
+    }
+}
+
+/// The header format for a pair's `REF`/`CAN` sub-label, with a medium border on
+/// the pair's outer edge (left for the `REF` column, right for the `CAN`).
+fn pair_label_format(left_edge: bool) -> Format {
+    let format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color(COLOR_SUBHEADER_BG)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
+        .set_border(FormatBorder::Thin);
+    if left_edge {
+        format.set_border_left(FormatBorder::Medium)
+    } else {
+        format.set_border_right(FormatBorder::Medium)
+    }
+}
+
+/// Builds the format for a data cell from its comparison state and which box
+/// edges it sits on. Returns `None` for a plain, unhighlighted cell that is not
+/// on any pair edge (written without a format, relying on default gridlines).
+fn data_cell_format(state: CellState, left: bool, right: bool, bottom: bool) -> Option<Format> {
+    if state == CellState::Equal && !left && !right && !bottom {
+        return None;
+    }
+    let mut format = Format::new();
+    match state {
+        CellState::Different => format = format.set_background_color(COLOR_DIFFERENT),
+        CellState::Missing => format = format.set_background_color(COLOR_MISSING),
+        CellState::Equal => {}
+    }
+    if left {
+        format = format.set_border_left(FormatBorder::Medium);
+    }
+    if right {
+        format = format.set_border_right(FormatBorder::Medium);
+    }
+    if bottom {
+        format = format.set_border_bottom(FormatBorder::Medium);
+    }
+    Some(format)
+}
+
 /// Computes a per-column width (in characters) sized to the widest of the header
 /// and any cell in that column, padded and clamped to a readable range.
 fn column_widths(report: &Report) -> Vec<f64> {
@@ -297,7 +360,6 @@ fn column_widths(report: &Report) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::report::Schema;
 
     fn report(headers: &[&str], rows: Vec<Vec<&str>>) -> Report {
         let schema = Schema::from_headers(headers.iter().map(|s| s.to_string()).collect());
@@ -308,6 +370,27 @@ mod tests {
                 .map(|r| r.into_iter().map(String::from).collect())
                 .collect(),
         }
+    }
+
+    #[test]
+    fn pair_edges_mark_outer_columns_of_adjacent_pairs() {
+        let s = Schema::from_headers(
+            ["MATCH_PERCENTAGE", "REF_XUNITS", "CAN_XUNITS"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        );
+        assert_eq!(pair_edges(&s, 0), (false, false)); // unpaired
+        assert_eq!(pair_edges(&s, 1), (true, false)); // REF -> left edge
+        assert_eq!(pair_edges(&s, 2), (false, true)); // CAN -> right edge
+    }
+
+    #[test]
+    fn data_cell_format_is_none_only_for_plain_non_edge_cells() {
+        assert!(data_cell_format(CellState::Equal, false, false, false).is_none());
+        assert!(data_cell_format(CellState::Equal, true, false, false).is_some());
+        assert!(data_cell_format(CellState::Different, false, false, false).is_some());
+        assert!(data_cell_format(CellState::Equal, false, false, true).is_some());
     }
 
     #[test]
