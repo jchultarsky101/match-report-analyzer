@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   band down through the last data row, further distinguishing the pairs.
 - The `COMPARISON_URL` column is rendered as a clickable hyperlink so the
   side-by-side comparison opens directly in a browser.
+- Matching `REF_`/`CAN_` pair cells (both values present and equal) are
+  highlighted light green; stand-alone columns and empty-vs-empty pairs are
+  never colored.
+- Input validation: the input must be a `.csv` file and must contain the
+  `REFERENCE_ASSET_PATH`, `CANDIDATE_ASSET_PATH`, and `MATCH_PERCENTAGE` columns,
+  otherwise it is rejected with a clear error. A CSV with no `REF_`/`CAN_` pairs
+  is a no-op (no output written, exit success).
+- The `COMPARISON_URL` column is sized to fit its values (up to Excel's maximum
+  column width) instead of the usual width cap.
 - Automated cross-platform release builds via [dist](https://github.com/axodotdev/cargo-dist):
   pushing a `v*` tag builds binaries for Windows (x64), macOS (Intel & Apple
   Silicon), and Linux (x64) and publishes a GitHub Release with shell/PowerShell

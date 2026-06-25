@@ -42,14 +42,22 @@ fn main() -> ExitCode {
     }
 
     match match_report_analyzer::convert(&cli.input, &output) {
-        Ok(stats) => {
+        Ok(Some(stats)) => {
             println!(
-                "Wrote {} ({} rows, {} pairs; {} differing, {} missing cells highlighted)",
+                "Wrote {} ({} rows, {} pairs; {} matching, {} differing, {} missing cells highlighted)",
                 output.display(),
                 stats.rows,
                 stats.pairs,
+                stats.matching,
                 stats.different,
                 stats.missing
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(None) => {
+            println!(
+                "Nothing to do: no REF_/CAN_ column pairs found in {}.",
+                cli.input.display()
             );
             ExitCode::SUCCESS
         }

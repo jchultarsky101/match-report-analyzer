@@ -8,6 +8,13 @@ use thiserror::Error;
 /// workbook.
 #[derive(Debug, Error)]
 pub enum AppError {
+    /// The input file is not a `.csv` file.
+    #[error("input file {path} is not a .csv file (expected a .csv extension)")]
+    NotCsv {
+        /// The rejected input path.
+        path: PathBuf,
+    },
+
     /// The input file could not be read.
     #[error("failed to read input file {path}: {source}")]
     ReadInput {
@@ -16,6 +23,13 @@ pub enum AppError {
         /// The underlying I/O error.
         #[source]
         source: std::io::Error,
+    },
+
+    /// The CSV is missing one or more columns required to build a match report.
+    #[error("the CSV is missing required column(s): {}", .columns.join(", "))]
+    MissingRequiredColumns {
+        /// The names of the required columns that are absent.
+        columns: Vec<String>,
     },
 
     /// An error occurred while parsing the CSV.

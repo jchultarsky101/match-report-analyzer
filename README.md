@@ -31,9 +31,13 @@ highlights **both** cells:
 
 | Highlight | Color | Meaning |
 | --- | --- | --- |
+| Match | 🟩 light green (`#C6EFCE`) | both values present and equal |
 | Difference | 🟥 light red (`#FFC7CE`) | both values present but not equal |
 | Missing | 🟨 light amber (`#FFEB9C`) | a value is present on one side only |
-| _(none)_ | — | the values are equal, or the column is not a `REF_`/`CAN_` pair |
+| _(none)_ | — | not a `REF_`/`CAN_` pair, or both values are empty |
+
+Highlighting only applies to `REF_`/`CAN_` pair columns; stand-alone columns are
+never colored.
 
 Values are compared as **trimmed text** and written to Excel verbatim, so the
 exact CSV content is preserved (no numeric coercion, no lost leading zeros or
@@ -60,8 +64,8 @@ The generated workbook is styled for readability:
 - **Sized columns** — each column is fit to its content (capped so long URLs
   don't dominate), with an autofilter over the data.
 - **Clickable comparison link** — the `COMPARISON_URL` column is written as a
-  hyperlink, so you can click straight through to the side-by-side comparison in
-  a browser.
+  hyperlink (and sized to fit its values, up to Excel's maximum column width), so
+  you can click straight through to the side-by-side comparison in a browser.
 
 ## Installation
 
@@ -112,6 +116,14 @@ match-report-analyzer data/test-report.csv report.xlsx
 
 Both arguments are required: the input match-report CSV and the path of the
 `.xlsx` file to create. The input file is only read, never modified.
+
+The input is validated before any work is done:
+
+- It must be a `.csv` file, otherwise it is rejected.
+- It must contain the `REFERENCE_ASSET_PATH`, `CANDIDATE_ASSET_PATH`, and
+  `MATCH_PERCENTAGE` columns; if any is missing the file is rejected.
+- If it contains no `REF_`/`CAN_` pairs there is nothing to compare, so the tool
+  does nothing (no output file is written) and exits successfully.
 
 > The output is always written in the modern Excel `.xlsx` format. If you give
 > the output a different (or missing) extension — for example the legacy
