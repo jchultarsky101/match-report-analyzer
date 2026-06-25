@@ -55,7 +55,8 @@ The generated workbook is styled for readability:
   from the header down to the last row — so the pairs are unmistakable among the
   plain columns. Unpaired columns span both header rows.
 - **Styled header** — bold white text on a deep blue band, frozen along with the
-  first column so context stays visible while scrolling.
+  three asset-pair identity columns (reference path, candidate path, and match
+  percentage) so the pair each row describes stays visible while scrolling.
 - **Sized columns** — each column is fit to its content (capped so long URLs
   don't dominate), with an autofilter over the data.
 
