@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   band down through the last data row, further distinguishing the pairs.
 - The `COMPARISON_URL` column is rendered as a clickable hyperlink so the
   side-by-side comparison opens directly in a browser.
+- Automated cross-platform release builds via [dist](https://github.com/axodotdev/cargo-dist):
+  pushing a `v*` tag builds binaries for Windows (x64), macOS (Intel & Apple
+  Silicon), and Linux (x64) and publishes a GitHub Release with shell/PowerShell
+  install scripts and a self-updater. Configured in `dist-workspace.toml` and
+  `.github/workflows/release.yml`.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.

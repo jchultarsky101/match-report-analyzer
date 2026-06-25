@@ -65,6 +65,29 @@ The generated workbook is styled for readability:
 
 ## Installation
 
+### Pre-built binaries (recommended)
+
+Once a release has been published, install the latest version with one command.
+Pre-built binaries are provided for Windows (x64), macOS (Intel & Apple Silicon),
+and Linux (x64).
+
+**macOS / Linux:**
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/jchultarsky101/match-report-analyzer/releases/latest/download/match-report-analyzer-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/jchultarsky101/match-report-analyzer/releases/latest/download/match-report-analyzer-installer.ps1 | iex"
+```
+
+The installers also place a `match-report-analyzer-update` helper on your `PATH`;
+run it at any time to upgrade an existing install to the newest release.
+
+### From source
+
 Requires a recent Rust toolchain (edition 2024, Rust **1.85+**). Install via
 [rustup](https://rustup.rs/).
 
@@ -131,6 +154,25 @@ cargo clippy --all-targets --all-features -- -D warnings   # lint
 
 Sample/test data lives in `data/` and is **git-ignored** — it is not distributed
 with the repository. See [`data/README.md`](data/README.md).
+
+### Releasing
+
+Releases are built automatically by [dist](https://github.com/axodotdev/cargo-dist)
+(see [`dist-workspace.toml`](dist-workspace.toml) and
+[`.github/workflows/release.yml`](.github/workflows/release.yml)). To cut a
+release:
+
+1. Bump `version` in `Cargo.toml` and update `CHANGELOG.md`.
+2. Commit, then tag and push:
+   ```sh
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+Pushing a `v*` tag triggers the release workflow, which cross-compiles the
+binaries for all targets and publishes a GitHub Release with the archives,
+checksums, install scripts, and updater. If you change anything in
+`dist-workspace.toml`, run `dist generate` to refresh the workflow.
 
 ## Contributing
 
