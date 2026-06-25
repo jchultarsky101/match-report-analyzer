@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured logging via [`tracing`](https://crates.io/crates/tracing), CLI
   parsing with [`clap`](https://crates.io/crates/clap) (builder pattern), and
   typed errors with [`thiserror`](https://crates.io/crates/thiserror).
+- Help screen shown via a `help` subcommand and when no arguments are supplied,
+  in addition to `-h`/`--help`.
+- Automatic correction of the output file extension to `.xlsx` (with a warning)
+  when a different or missing extension is given, so Excel opens the result
+  without an "extension doesn't match" warning.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.

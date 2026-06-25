@@ -2,7 +2,7 @@
 
 use std::process::ExitCode;
 
-use tracing::error;
+use tracing::{error, warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use match_report_analyzer::cli::Cli;
@@ -30,11 +30,22 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     init_tracing(cli.verbosity);
 
-    match match_report_analyzer::convert(&cli.input, &cli.output) {
+    // Excel only opens this format cleanly from a `.xlsx` file, so correct the
+    // extension if the user supplied something else (e.g. the legacy `.xls`).
+    let output = match_report_analyzer::normalize_output_path(&cli.output);
+    if output != cli.output {
+        warn!(
+            requested = %cli.output.display(),
+            writing = %output.display(),
+            "adjusted output extension to .xlsx so Excel can open the file"
+        );
+    }
+
+    match match_report_analyzer::convert(&cli.input, &output) {
         Ok(stats) => {
             println!(
                 "Wrote {} ({} rows, {} pairs; {} differing, {} missing cells highlighted)",
-                cli.output.display(),
+                output.display(),
                 stats.rows,
                 stats.pairs,
                 stats.different,
