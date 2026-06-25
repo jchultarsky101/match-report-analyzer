@@ -228,11 +228,16 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
         worksheet.set_column_width(col as u16, width)?;
     }
 
-    // Freeze both header rows and the first (reference path) column so they stay
-    // visible while scrolling a wide, tall report. Enable an autofilter on the
-    // second (per-column) header row.
-    let freeze_col = if schema.column_count() > 0 { 1 } else { 0 };
-    worksheet.set_freeze_panes(DATA_START_ROW, freeze_col)?;
+    // Freeze both header rows and the asset-pair identity columns — reference
+    // path, candidate path, and match percentage (the leading columns up to and
+    // including MATCH_PERCENTAGE) — so the pair each row describes stays visible
+    // while scrolling a wide, tall report. Enable an autofilter on the second
+    // (per-column) header row.
+    let frozen_columns = match_col
+        .map(|col| col + 1)
+        .unwrap_or(1)
+        .min(schema.column_count());
+    worksheet.set_freeze_panes(DATA_START_ROW, frozen_columns as u16)?;
     if schema.column_count() > 0 && !report.rows.is_empty() {
         let last_col = (schema.column_count() - 1) as u16;
         let last_row = report.rows.len() as u32 + LABEL_HEADER_ROW;
