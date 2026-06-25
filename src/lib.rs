@@ -47,9 +47,30 @@ pub fn normalize_output_path(path: &Path) -> PathBuf {
     }
 }
 
+/// File extension required of the input file.
+const CSV_EXTENSION: &str = "csv";
+
 /// Reads the match-report CSV at `input` and writes a highlighted `.xlsx`
 /// workbook to `output`.
-pub fn convert(input: &Path, output: &Path) -> Result<ConversionStats, AppError> {
+///
+/// Returns:
+/// - `Ok(Some(stats))` when a workbook was written;
+/// - `Ok(None)` when there is nothing to do (the CSV has no `REF_`/`CAN_` pairs
+///   to compare), in which case no file is written;
+/// - `Err(_)` when the input is rejected — it isn't a `.csv` file, can't be
+///   parsed, or is missing a required column.
+pub fn convert(input: &Path, output: &Path) -> Result<Option<ConversionStats>, AppError> {
+    // Reject anything that isn't a .csv file outright.
+    let is_csv = input
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(CSV_EXTENSION));
+    if !is_csv {
+        return Err(AppError::NotCsv {
+            path: input.to_path_buf(),
+        });
+    }
+
     info!(?input, "reading match report");
     let mut report = Report::from_csv_path(input)?;
     info!(
@@ -59,22 +80,33 @@ pub fn convert(input: &Path, output: &Path) -> Result<ConversionStats, AppError>
         "parsed report"
     );
 
+    // Reject files that lack the columns a match report must have.
+    let missing = report.schema.missing_required_columns();
+    if !missing.is_empty() {
+        return Err(AppError::MissingRequiredColumns {
+            columns: missing.into_iter().map(String::from).collect(),
+        });
+    }
+
+    // Without any REF_/CAN_ pairs there is nothing to compare or highlight.
+    if report.schema.pair_count() == 0 {
+        info!("no REF_/CAN_ column pairs found; nothing to do");
+        return Ok(None);
+    }
+
     // Surface the most relevant pairs first: sort by match percentage, highest
-    // (closest to an identical match) at the top.
+    // (closest to an identical match) at the top. MATCH_PERCENTAGE is required,
+    // so it is always present here.
     if let Some(column) = report.schema.column_index(report::MATCH_PERCENTAGE_COLUMN) {
         report.sort_by_numeric_desc(column);
         info!(
             column = report::MATCH_PERCENTAGE_COLUMN,
             "sorted rows descending"
         );
-    } else {
-        info!(
-            column = report::MATCH_PERCENTAGE_COLUMN,
-            "column not found; leaving row order unchanged"
-        );
     }
 
-    xlsx::write_workbook(&report, output)
+    let stats = xlsx::write_workbook(&report, output)?;
+    Ok(Some(stats))
 }
 
 #[cfg(test)]

@@ -17,6 +17,12 @@ const REF_PREFIX: &str = "REF_";
 /// Prefix marking a column that holds a *candidate* asset's metadata value.
 const CAN_PREFIX: &str = "CAN_";
 
+/// Header of the reference asset's path column.
+pub const REFERENCE_ASSET_PATH_COLUMN: &str = "REFERENCE_ASSET_PATH";
+
+/// Header of the candidate asset's path column.
+pub const CANDIDATE_ASSET_PATH_COLUMN: &str = "CANDIDATE_ASSET_PATH";
+
 /// Header of the geometric similarity column (0–100). The most relevant pairs
 /// have the highest value, so this column drives sorting and the heat-map
 /// gradient in the rendered workbook.
@@ -26,12 +32,22 @@ pub const MATCH_PERCENTAGE_COLUMN: &str = "MATCH_PERCENTAGE";
 /// a clickable hyperlink in the workbook.
 pub const COMPARISON_URL_COLUMN: &str = "COMPARISON_URL";
 
+/// Columns that every match report must contain for the conversion to make
+/// sense. Their absence means the file isn't a usable match report.
+pub const REQUIRED_COLUMNS: [&str; 3] = [
+    REFERENCE_ASSET_PATH_COLUMN,
+    CANDIDATE_ASSET_PATH_COLUMN,
+    MATCH_PERCENTAGE_COLUMN,
+];
+
 /// The comparison state of a single `REF_`/`CAN_` cell pair within a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CellState {
-    /// The reference and candidate values are equal (after trimming), or the
-    /// cell does not participate in a comparable pair.
-    Equal,
+    /// Nothing to highlight: the cell is not part of a comparable pair, or it is
+    /// part of a pair where both values are empty (no data to compare).
+    Neutral,
+    /// Both values are present and equal — a genuine match.
+    Match,
     /// Both values are present but differ.
     Different,
     /// Exactly one of the two values is empty (missing on one side).
@@ -41,14 +57,17 @@ pub enum CellState {
 /// Compares a reference value against a candidate value.
 ///
 /// Comparison is performed on the trimmed string representation so that the
-/// CSV's exact textual values are preserved and never silently coerced. Two
-/// empty values are considered [`CellState::Equal`].
+/// CSV's exact textual values are preserved and never silently coerced. A pair
+/// counts as a [`CellState::Match`] only when both sides are present and equal;
+/// two empty values are [`CellState::Neutral`] (there is no data to match).
 pub fn classify(reference: &str, candidate: &str) -> CellState {
     let reference = reference.trim();
     let candidate = candidate.trim();
 
-    if reference == candidate {
-        CellState::Equal
+    if reference.is_empty() && candidate.is_empty() {
+        CellState::Neutral
+    } else if reference == candidate {
+        CellState::Match
     } else if reference.is_empty() || candidate.is_empty() {
         CellState::Missing
     } else {
@@ -128,6 +147,16 @@ impl Schema {
             .or_else(|| header.strip_prefix(CAN_PREFIX))
     }
 
+    /// The [`REQUIRED_COLUMNS`] that are absent from this schema, in order.
+    /// An empty result means all required columns are present.
+    pub fn missing_required_columns(&self) -> Vec<&'static str> {
+        REQUIRED_COLUMNS
+            .iter()
+            .copied()
+            .filter(|name| self.column_index(name).is_none())
+            .collect()
+    }
+
     /// The number of comparable `REF_`/`CAN_` pairs in the schema.
     pub fn pair_count(&self) -> usize {
         // Each pair is counted twice (once per half), so divide by two.
@@ -200,14 +229,14 @@ impl Report {
 
     /// Classifies the cell at `(row, column)` against its pair partner.
     ///
-    /// Returns [`CellState::Equal`] for columns that are not part of a pair, or
+    /// Returns [`CellState::Neutral`] for columns that are not part of a pair, or
     /// when either cell is out of bounds (e.g. a short, ragged row).
     pub fn cell_state(&self, row: usize, column: usize) -> CellState {
         let Some(partner) = self.schema.partner(column) else {
-            return CellState::Equal;
+            return CellState::Neutral;
         };
         let Some(record) = self.rows.get(row) else {
-            return CellState::Equal;
+            return CellState::Neutral;
         };
         let here = record.get(column).map(String::as_str).unwrap_or("");
         let there = record.get(partner).map(String::as_str).unwrap_or("");
@@ -232,10 +261,15 @@ mod tests {
     }
 
     #[test]
-    fn classify_equal_values() {
-        assert_eq!(classify("mm", "mm"), CellState::Equal);
-        assert_eq!(classify(" mm ", "mm"), CellState::Equal);
-        assert_eq!(classify("", ""), CellState::Equal);
+    fn classify_matching_values() {
+        assert_eq!(classify("mm", "mm"), CellState::Match);
+        assert_eq!(classify(" mm ", "mm"), CellState::Match);
+    }
+
+    #[test]
+    fn classify_both_empty_is_neutral() {
+        assert_eq!(classify("", ""), CellState::Neutral);
+        assert_eq!(classify("  ", ""), CellState::Neutral);
     }
 
     #[test]
@@ -249,6 +283,24 @@ mod tests {
         assert_eq!(classify("mm", ""), CellState::Missing);
         assert_eq!(classify("", "mm"), CellState::Missing);
         assert_eq!(classify("  ", "mm"), CellState::Missing);
+    }
+
+    #[test]
+    fn missing_required_columns_reports_absentees() {
+        let complete = schema(&[
+            "REFERENCE_ASSET_PATH",
+            "CANDIDATE_ASSET_PATH",
+            "MATCH_PERCENTAGE",
+            "REF_XUNITS",
+            "CAN_XUNITS",
+        ]);
+        assert!(complete.missing_required_columns().is_empty());
+
+        let partial = schema(&["REFERENCE_ASSET_PATH", "REF_XUNITS", "CAN_XUNITS"]);
+        assert_eq!(
+            partial.missing_required_columns(),
+            vec!["CANDIDATE_ASSET_PATH", "MATCH_PERCENTAGE"]
+        );
     }
 
     #[test]
@@ -342,7 +394,7 @@ mod tests {
                 vec!["mm".into(), "".into()],
             ],
         };
-        assert_eq!(report.cell_state(0, 0), CellState::Equal);
+        assert_eq!(report.cell_state(0, 0), CellState::Match);
         assert_eq!(report.cell_state(1, 0), CellState::Different);
         assert_eq!(report.cell_state(1, 1), CellState::Different);
         assert_eq!(report.cell_state(2, 0), CellState::Missing);

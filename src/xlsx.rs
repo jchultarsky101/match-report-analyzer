@@ -21,6 +21,9 @@ use crate::report::{COMPARISON_URL_COLUMN, CellState, MATCH_PERCENTAGE_COLUMN, R
 /// text rather than risking a write error.
 const MAX_URL_LEN: usize = 2080;
 
+/// Background color for paired cells whose values match. Excel's standard
+/// "good" green fill.
+const COLOR_MATCH: Color = Color::RGB(0xC6EFCE);
 /// Background color for cells whose reference and candidate values differ.
 /// Excel's standard "bad" red fill.
 const COLOR_DIFFERENT: Color = Color::RGB(0xFFC7CE);
@@ -56,8 +59,11 @@ const DATA_START_ROW: u32 = 2;
 const COL_WIDTH_PADDING: f64 = 2.0;
 /// Narrowest a sized column may be.
 const MIN_COL_WIDTH: f64 = 8.0;
-/// Widest a sized column may be, so long values (e.g. URLs) don't dominate.
+/// Widest a normal sized column may be, so long values don't dominate.
 const MAX_COL_WIDTH: f64 = 48.0;
+/// Excel's hard maximum column width, used for the comparison-URL column so it
+/// is sized to its (long) values rather than the usual cap.
+const EXCEL_MAX_COL_WIDTH: f64 = 255.0;
 
 /// Worksheet tab name.
 const SHEET_NAME: &str = "Match Report";
@@ -69,6 +75,8 @@ pub struct ConversionStats {
     pub rows: usize,
     /// Number of comparable `REF_`/`CAN_` pairs in the schema.
     pub pairs: usize,
+    /// Number of cells highlighted as matching.
+    pub matching: usize,
     /// Number of cells highlighted as differing.
     pub different: usize,
     /// Number of cells highlighted as missing-on-one-side.
@@ -223,9 +231,10 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
 
             let state = report.cell_state(row_idx, col);
             match state {
+                CellState::Match => stats.matching += 1,
                 CellState::Different => stats.different += 1,
                 CellState::Missing => stats.missing += 1,
-                CellState::Equal => {}
+                CellState::Neutral => {}
             }
 
             // Box edges: the pair's outer columns get medium left/right borders,
@@ -290,6 +299,7 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     info!(
         rows = stats.rows,
         pairs = stats.pairs,
+        matching = stats.matching,
         different = stats.different,
         missing = stats.missing,
         "conversion complete"
@@ -339,14 +349,15 @@ fn pair_label_format(left_edge: bool) -> Format {
 /// edges it sits on. Returns `None` for a plain, unhighlighted cell that is not
 /// on any pair edge (written without a format, relying on default gridlines).
 fn data_cell_format(state: CellState, left: bool, right: bool, bottom: bool) -> Option<Format> {
-    if state == CellState::Equal && !left && !right && !bottom {
+    if state == CellState::Neutral && !left && !right && !bottom {
         return None;
     }
     let mut format = Format::new();
     match state {
+        CellState::Match => format = format.set_background_color(COLOR_MATCH),
         CellState::Different => format = format.set_background_color(COLOR_DIFFERENT),
         CellState::Missing => format = format.set_background_color(COLOR_MISSING),
-        CellState::Equal => {}
+        CellState::Neutral => {}
     }
     if left {
         format = format.set_border_left(FormatBorder::Medium);
@@ -362,8 +373,13 @@ fn data_cell_format(state: CellState, left: bool, right: bool, bottom: bool) -> 
 
 /// Computes a per-column width (in characters) sized to the widest of the header
 /// and any cell in that column, padded and clamped to a readable range.
+///
+/// The comparison-URL column is exempt from the usual width cap and sized to its
+/// longest value (URLs are long but the user wants them fully visible), bounded
+/// only by Excel's maximum column width.
 fn column_widths(report: &Report) -> Vec<f64> {
     let column_count = report.schema.column_count();
+    let url_col = report.schema.column_index(COMPARISON_URL_COLUMN);
     let mut max_chars = vec![0usize; column_count];
 
     for (col, header) in report.schema.headers().iter().enumerate() {
@@ -379,7 +395,16 @@ fn column_widths(report: &Report) -> Vec<f64> {
 
     max_chars
         .into_iter()
-        .map(|chars| (chars as f64 + COL_WIDTH_PADDING).clamp(MIN_COL_WIDTH, MAX_COL_WIDTH))
+        .enumerate()
+        .map(|(col, chars)| {
+            let width = chars as f64 + COL_WIDTH_PADDING;
+            let max = if Some(col) == url_col {
+                EXCEL_MAX_COL_WIDTH
+            } else {
+                MAX_COL_WIDTH
+            };
+            width.clamp(MIN_COL_WIDTH, max)
+        })
         .collect()
 }
 
@@ -413,10 +438,12 @@ mod tests {
 
     #[test]
     fn data_cell_format_is_none_only_for_plain_non_edge_cells() {
-        assert!(data_cell_format(CellState::Equal, false, false, false).is_none());
-        assert!(data_cell_format(CellState::Equal, true, false, false).is_some());
+        assert!(data_cell_format(CellState::Neutral, false, false, false).is_none());
+        assert!(data_cell_format(CellState::Neutral, true, false, false).is_some());
+        assert!(data_cell_format(CellState::Match, false, false, false).is_some());
         assert!(data_cell_format(CellState::Different, false, false, false).is_some());
-        assert!(data_cell_format(CellState::Equal, false, false, true).is_some());
+        assert!(data_cell_format(CellState::Missing, false, false, false).is_some());
+        assert!(data_cell_format(CellState::Neutral, false, false, true).is_some());
     }
 
     #[test]
@@ -451,6 +478,7 @@ mod tests {
         let stats = write_workbook(&r, &path).expect("write should succeed");
         assert_eq!(stats.rows, 3);
         assert_eq!(stats.pairs, 1);
+        assert_eq!(stats.matching, 2); // the "mm" vs "mm" pair, both cells
         assert_eq!(stats.different, 2); // the "mm" vs "in" pair, both cells
         assert_eq!(stats.missing, 2); // the "mm" vs "" pair, both cells
         assert!(path.exists());
