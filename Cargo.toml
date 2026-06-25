@@ -3,24 +3,25 @@ name = "match-report-analyzer"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-description = "A cross-platform native desktop app (macOS & Windows) for analyzing Physna geometric match-report CSV exports — summarize, filter, and surface duplicate or similar parts."
+description = "A CLI tool that converts a Physna match-report CSV into a color-highlighted Excel workbook, visually flagging where reference (REF_) and candidate (CAN_) metadata differ."
 authors = ["Julian Chultarsky <jchultarsky@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jchultarsky101/match-report-analyzer"
 homepage = "https://github.com/jchultarsky101/match-report-analyzer"
 documentation = "https://docs.rs/match-report-analyzer"
 readme = "README.md"
-keywords = ["physna", "csv", "gui", "cad", "geometric-search"]
-categories = ["gui", "visualization"]
+keywords = ["physna", "csv", "xlsx", "cli", "diff"]
+categories = ["command-line-utilities", "visualization"]
 exclude = ["/data", "/.github"]
-
-[dependencies]
-anyhow = "1.0.102"
-csv = "1.4.0"
-iced = "0.13.1"
-rfd = "0.17.2"
-rusqlite = { version = "0.40.1", features = ["bundled"] }
 
 [profile.release]
 lto = true
 strip = true
+
+[dependencies]
+clap = { version = "4.6.1", default-features = false, features = ["std", "help", "usage", "error-context"] }
+csv = "1.4.0"
+rust_xlsxwriter = "0.95.0"
+thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
