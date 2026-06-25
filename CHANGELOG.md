@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-25
+
 ### Added
 - Initial project scaffolding: licensing (MIT OR Apache-2.0), README, contributor
   guide, code of conduct, CI workflow, and editor/formatting configuration.
@@ -60,4 +62,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced the earlier Iced-based desktop GUI prototype (SQLite-backed query
   grid) with this focused CSV-to-Excel CLI. None of the GUI work was released.
 
-[Unreleased]: https://github.com/jchultarsky101/match-report-analyzer/commits/main
+[Unreleased]: https://github.com/jchultarsky101/match-report-analyzer/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jchultarsky101/match-report-analyzer/releases/tag/v0.1.0
