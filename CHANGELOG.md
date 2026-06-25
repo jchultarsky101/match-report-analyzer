@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input validation: the input must be a `.csv` file and must contain the
   `REFERENCE_ASSET_PATH`, `CANDIDATE_ASSET_PATH`, and `MATCH_PERCENTAGE` columns,
   otherwise it is rejected with a clear error. A CSV with no `REF_`/`CAN_` pairs
-  is a no-op (no output written, exit success).
+  is still converted normally (there is simply nothing to highlight).
 - The `COMPARISON_URL` column is sized to fit its values (up to Excel's maximum
   column width) instead of the usual width cap.
 - Automated cross-platform release builds via [dist](https://github.com/axodotdev/cargo-dist):

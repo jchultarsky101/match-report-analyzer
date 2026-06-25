@@ -122,8 +122,9 @@ The input is validated before any work is done:
 - It must be a `.csv` file, otherwise it is rejected.
 - It must contain the `REFERENCE_ASSET_PATH`, `CANDIDATE_ASSET_PATH`, and
   `MATCH_PERCENTAGE` columns; if any is missing the file is rejected.
-- If it contains no `REF_`/`CAN_` pairs there is nothing to compare, so the tool
-  does nothing (no output file is written) and exits successfully.
+
+A CSV with no `REF_`/`CAN_` metadata pairs is perfectly valid — it is still
+converted to a workbook normally, just with nothing to highlight.
 
 > The output is always written in the modern Excel `.xlsx` format. If you give
 > the output a different (or missing) extension — for example the legacy

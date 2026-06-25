@@ -484,4 +484,31 @@ mod tests {
         assert!(path.exists());
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn writes_workbook_with_no_pairs() {
+        // A report with only stand-alone columns (no REF_/CAN_ pairs) is valid
+        // and must still produce a workbook without error or highlighting.
+        let r = report(
+            &[
+                "REFERENCE_ASSET_PATH",
+                "CANDIDATE_ASSET_PATH",
+                "MATCH_PERCENTAGE",
+                "COMPARISON_URL",
+            ],
+            vec![
+                vec!["a", "b", "90", "https://example.com/c?a=1"],
+                vec!["c", "d", "80", ""],
+            ],
+        );
+        let path = std::env::temp_dir().join("mra_xlsx_no_pairs_test.xlsx");
+        let stats = write_workbook(&r, &path).expect("write should succeed with no pairs");
+        assert_eq!(stats.pairs, 0);
+        assert_eq!(stats.matching, 0);
+        assert_eq!(stats.different, 0);
+        assert_eq!(stats.missing, 0);
+        assert_eq!(stats.rows, 2);
+        assert!(path.exists());
+        let _ = std::fs::remove_file(&path);
+    }
 }
