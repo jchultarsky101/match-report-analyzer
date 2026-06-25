@@ -22,6 +22,10 @@ const CAN_PREFIX: &str = "CAN_";
 /// gradient in the rendered workbook.
 pub const MATCH_PERCENTAGE_COLUMN: &str = "MATCH_PERCENTAGE";
 
+/// Header of the column holding the deep-link comparison URL. It is rendered as
+/// a clickable hyperlink in the workbook.
+pub const COMPARISON_URL_COLUMN: &str = "COMPARISON_URL";
+
 /// The comparison state of a single `REF_`/`CAN_` cell pair within a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CellState {

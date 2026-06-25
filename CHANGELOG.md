@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   column pairs are easy to identify. Unpaired columns span both header rows.
 - A medium border box is drawn around each `REF_`/`CAN_` pair, from the header
   band down through the last data row, further distinguishing the pairs.
+- The `COMPARISON_URL` column is rendered as a clickable hyperlink so the
+  side-by-side comparison opens directly in a browser.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.

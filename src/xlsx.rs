@@ -10,12 +10,16 @@ use std::path::Path;
 
 use rust_xlsxwriter::{
     Color, ConditionalFormat3ColorScale, ConditionalFormatType, DocProperties, Format, FormatAlign,
-    FormatBorder, Workbook,
+    FormatBorder, Url, Workbook,
 };
 use tracing::{debug, info};
 
 use crate::error::AppError;
-use crate::report::{CellState, MATCH_PERCENTAGE_COLUMN, Report, Schema};
+use crate::report::{COMPARISON_URL_COLUMN, CellState, MATCH_PERCENTAGE_COLUMN, Report, Schema};
+
+/// Excel's maximum supported URL length. Longer values are written as plain
+/// text rather than risking a write error.
+const MAX_URL_LEN: usize = 2080;
 
 /// Background color for cells whose reference and candidate values differ.
 /// Excel's standard "bad" red fill.
@@ -109,6 +113,7 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
 
     let schema = &report.schema;
     let match_col = schema.column_index(MATCH_PERCENTAGE_COLUMN);
+    let url_col = schema.column_index(COMPARISON_URL_COLUMN);
     let mut stats = ConversionStats {
         pairs: schema.pair_count(),
         ..Default::default()
@@ -196,6 +201,22 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
                             &percent_format,
                         )?;
                     }
+                }
+                continue;
+            }
+
+            // The comparison column is written as a clickable hyperlink (Excel's
+            // default blue underlined link style) so users can open the deep link
+            // in a browser. Blank or non-http / over-long values fall back to
+            // plain text to avoid invalid links.
+            if Some(col) == url_col {
+                let link = value.trim();
+                if (link.starts_with("http://") || link.starts_with("https://"))
+                    && link.len() <= MAX_URL_LEN
+                {
+                    worksheet.write_url(excel_row, col as u16, Url::new(link))?;
+                } else {
+                    worksheet.write(excel_row, col as u16, value)?;
                 }
                 continue;
             }
@@ -413,11 +434,16 @@ mod tests {
     #[test]
     fn writes_a_workbook_to_disk() {
         let r = report(
-            &["MATCH_PERCENTAGE", "REF_XUNITS", "CAN_XUNITS"],
+            &[
+                "MATCH_PERCENTAGE",
+                "REF_XUNITS",
+                "CAN_XUNITS",
+                "COMPARISON_URL",
+            ],
             vec![
-                vec!["100", "mm", "mm"],
-                vec!["80.5", "mm", "in"],
-                vec!["50", "mm", ""],
+                vec!["100", "mm", "mm", "https://example.com/compare?a=1"],
+                vec!["80.5", "mm", "in", "https://example.com/compare?a=2"],
+                vec!["50", "mm", "", ""], // blank URL falls back to plain text
             ],
         );
         let dir = std::env::temp_dir();

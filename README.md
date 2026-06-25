@@ -59,6 +59,9 @@ The generated workbook is styled for readability:
   percentage) so the pair each row describes stays visible while scrolling.
 - **Sized columns** — each column is fit to its content (capped so long URLs
   don't dominate), with an autofilter over the data.
+- **Clickable comparison link** — the `COMPARISON_URL` column is written as a
+  hyperlink, so you can click straight through to the side-by-side comparison in
+  a browser.
 
 ## Installation
 
