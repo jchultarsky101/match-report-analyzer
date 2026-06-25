@@ -51,13 +51,29 @@ pub fn normalize_output_path(path: &Path) -> PathBuf {
 /// workbook to `output`.
 pub fn convert(input: &Path, output: &Path) -> Result<ConversionStats, AppError> {
     info!(?input, "reading match report");
-    let report = Report::from_csv_path(input)?;
+    let mut report = Report::from_csv_path(input)?;
     info!(
         rows = report.rows.len(),
         columns = report.schema.column_count(),
         pairs = report.schema.pair_count(),
         "parsed report"
     );
+
+    // Surface the most relevant pairs first: sort by match percentage, highest
+    // (closest to an identical match) at the top.
+    if let Some(column) = report.schema.column_index(report::MATCH_PERCENTAGE_COLUMN) {
+        report.sort_by_numeric_desc(column);
+        info!(
+            column = report::MATCH_PERCENTAGE_COLUMN,
+            "sorted rows descending"
+        );
+    } else {
+        info!(
+            column = report::MATCH_PERCENTAGE_COLUMN,
+            "column not found; leaving row order unchanged"
+        );
+    }
+
     xlsx::write_workbook(&report, output)
 }
 

@@ -37,8 +37,22 @@ highlights **both** cells:
 
 Values are compared as **trimmed text** and written to Excel verbatim, so the
 exact CSV content is preserved (no numeric coercion, no lost leading zeros or
-precision). The header row is bold and frozen, and an autofilter is enabled for
-convenient inspection.
+precision). The one exception is the `MATCH_PERCENTAGE` column, which is written
+as a real number so it can be sorted and shaded numerically.
+
+### Presentation
+
+The generated workbook is styled for readability:
+
+- **Sorted by relevance** — rows are ordered by `MATCH_PERCENTAGE`, highest
+  (closest to an identical match) first.
+- **Heat-map gradient** on the `MATCH_PERCENTAGE` column — a color scale from a
+  cool blue at 0%, through yellow at 50%, to "red hot" at 100%, so the strongest
+  matches stand out at a glance.
+- **Styled header** — bold white text on a deep blue band, frozen along with the
+  first column so context stays visible while scrolling.
+- **Sized columns** — each column is fit to its content (capped so long URLs
+  don't dominate), with an autofilter over the data.
 
 ## Installation
 

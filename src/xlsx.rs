@@ -1,21 +1,52 @@
-//! Renders a [`Report`] into a color-highlighted Excel workbook.
+//! Renders a [`Report`] into a color-highlighted, visually polished Excel
+//! workbook.
+//!
+//! Design choices follow common spreadsheet-presentation best practices: a
+//! single accent color for the header, a restrained set of semantic highlight
+//! colors, right-aligned numbers with a fixed precision, sized columns, a frozen
+//! header, an autofilter, and a heat-map color scale over the key metric.
 
 use std::path::Path;
 
-use rust_xlsxwriter::{Color, Format, FormatBorder, Workbook};
+use rust_xlsxwriter::{
+    Color, ConditionalFormat3ColorScale, ConditionalFormatType, DocProperties, Format, FormatAlign,
+    FormatBorder, Workbook,
+};
 use tracing::{debug, info};
 
 use crate::error::AppError;
-use crate::report::{CellState, Report};
+use crate::report::{CellState, MATCH_PERCENTAGE_COLUMN, Report};
 
 /// Background color for cells whose reference and candidate values differ.
-/// This is Excel's standard "bad" red fill.
+/// Excel's standard "bad" red fill.
 const COLOR_DIFFERENT: Color = Color::RGB(0xFFC7CE);
 /// Background color for cells where the value is present on one side but missing
-/// on the other. This is Excel's standard "neutral" amber fill.
+/// on the other. Excel's standard "neutral" amber fill.
 const COLOR_MISSING: Color = Color::RGB(0xFFEB9C);
-/// Background color for the header row.
-const COLOR_HEADER: Color = Color::RGB(0xD9D9D9);
+/// Header fill: a deep, professional blue with white text for strong contrast.
+const COLOR_HEADER_BG: Color = Color::RGB(0x1F4E78);
+
+/// Heat-map color for the lowest match percentage (0%): a calm, "cool" blue.
+const COLOR_HEAT_LOW: Color = Color::RGB(0x5A8AC6);
+/// Heat-map color for the midpoint (50%): a warm yellow.
+const COLOR_HEAT_MID: Color = Color::RGB(0xFFEB84);
+/// Heat-map color for the highest match percentage (100%): "red hot".
+const COLOR_HEAT_HIGH: Color = Color::RGB(0xF8696B);
+
+/// Number format applied to the match-percentage column.
+const PERCENT_NUM_FORMAT: &str = "0.00";
+
+/// Height (in points) of the header row, giving the title band some presence.
+const HEADER_ROW_HEIGHT: f64 = 28.0;
+/// Padding (in characters) added to a column's widest content.
+const COL_WIDTH_PADDING: f64 = 2.0;
+/// Narrowest a sized column may be.
+const MIN_COL_WIDTH: f64 = 8.0;
+/// Widest a sized column may be, so long values (e.g. URLs) don't dominate.
+const MAX_COL_WIDTH: f64 = 48.0;
+
+/// Worksheet tab name.
+const SHEET_NAME: &str = "Match Report";
 
 /// A summary of what was written, returned for logging and reporting.
 #[derive(Debug, Default, Clone, Copy)]
@@ -31,19 +62,32 @@ pub struct ConversionStats {
 }
 
 /// Writes `report` to an `.xlsx` workbook at `output`, highlighting cells where
-/// the reference and candidate metadata differ.
+/// the reference and candidate metadata differ and applying a heat-map gradient
+/// to the match-percentage column.
 pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats, AppError> {
     let header_format = Format::new()
         .set_bold()
-        .set_background_color(COLOR_HEADER)
+        .set_font_color(Color::White)
+        .set_background_color(COLOR_HEADER_BG)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
         .set_border(FormatBorder::Thin);
     let different_format = Format::new().set_background_color(COLOR_DIFFERENT);
     let missing_format = Format::new().set_background_color(COLOR_MISSING);
+    let percent_format = Format::new().set_num_format(PERCENT_NUM_FORMAT);
 
     let mut workbook = Workbook::new();
+    workbook.set_properties(
+        &DocProperties::new()
+            .set_title("Physna Match Report")
+            .set_subject("Reference vs. candidate metadata comparison"),
+    );
+
     let worksheet = workbook.add_worksheet();
+    worksheet.set_name(SHEET_NAME)?;
 
     let schema = &report.schema;
+    let match_col = schema.column_index(MATCH_PERCENTAGE_COLUMN);
     let mut stats = ConversionStats {
         pairs: schema.pair_count(),
         ..Default::default()
@@ -53,12 +97,38 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     for (col, label) in schema.headers().iter().enumerate() {
         worksheet.write_with_format(0, col as u16, label, &header_format)?;
     }
+    worksheet.set_row_height(0, HEADER_ROW_HEIGHT)?;
 
     // Data rows. The header occupies row 0, so data starts at row 1.
     for (row_idx, record) in report.rows.iter().enumerate() {
         let excel_row = (row_idx + 1) as u32;
         for col in 0..schema.column_count() {
             let value = record.get(col).map(String::as_str).unwrap_or("");
+
+            // The match-percentage column is written as a real number (so the
+            // heat-map gradient and numeric sort work) with a fixed precision.
+            if Some(col) == match_col {
+                match value.trim().parse::<f64>() {
+                    Ok(number) => {
+                        worksheet.write_with_format(
+                            excel_row,
+                            col as u16,
+                            number,
+                            &percent_format,
+                        )?;
+                    }
+                    Err(_) => {
+                        worksheet.write_with_format(
+                            excel_row,
+                            col as u16,
+                            value,
+                            &percent_format,
+                        )?;
+                    }
+                }
+                continue;
+            }
+
             match report.cell_state(row_idx, col) {
                 CellState::Equal => {
                     worksheet.write(excel_row, col as u16, value)?;
@@ -76,12 +146,33 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     }
     stats.rows = report.rows.len();
 
-    // Freeze the header row and enable an autofilter for easier inspection.
-    worksheet.set_freeze_panes(1, 0)?;
+    // Size every column to its content (capped) for legibility.
+    for (col, width) in column_widths(report).into_iter().enumerate() {
+        worksheet.set_column_width(col as u16, width)?;
+    }
+
+    // Freeze the header row and the first (reference path) column so both stay
+    // visible while scrolling a wide, tall report. Enable an autofilter too.
+    let freeze_col = if schema.column_count() > 0 { 1 } else { 0 };
+    worksheet.set_freeze_panes(1, freeze_col)?;
     if schema.column_count() > 0 && !report.rows.is_empty() {
         let last_col = (schema.column_count() - 1) as u16;
         let last_row = report.rows.len() as u32;
         worksheet.autofilter(0, 0, last_row, last_col)?;
+
+        // Heat-map gradient over the match-percentage column: cool at 0%, warm
+        // at 50%, red-hot at 100%. Anchored to fixed 0/50/100 so the colors mean
+        // the same thing regardless of the data's actual range.
+        if let Some(col) = match_col {
+            let gradient = ConditionalFormat3ColorScale::new()
+                .set_minimum(ConditionalFormatType::Number, 0)
+                .set_midpoint(ConditionalFormatType::Number, 50)
+                .set_maximum(ConditionalFormatType::Number, 100)
+                .set_minimum_color(COLOR_HEAT_LOW)
+                .set_midpoint_color(COLOR_HEAT_MID)
+                .set_maximum_color(COLOR_HEAT_HIGH);
+            worksheet.add_conditional_format(1, col as u16, last_row, col as u16, &gradient)?;
+        }
     }
 
     debug!(?output, "saving workbook");
@@ -95,4 +186,77 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     );
 
     Ok(stats)
+}
+
+/// Computes a per-column width (in characters) sized to the widest of the header
+/// and any cell in that column, padded and clamped to a readable range.
+fn column_widths(report: &Report) -> Vec<f64> {
+    let column_count = report.schema.column_count();
+    let mut max_chars = vec![0usize; column_count];
+
+    for (col, header) in report.schema.headers().iter().enumerate() {
+        max_chars[col] = header.chars().count();
+    }
+    for row in &report.rows {
+        for (col, cell) in row.iter().enumerate() {
+            if col < column_count {
+                max_chars[col] = max_chars[col].max(cell.chars().count());
+            }
+        }
+    }
+
+    max_chars
+        .into_iter()
+        .map(|chars| (chars as f64 + COL_WIDTH_PADDING).clamp(MIN_COL_WIDTH, MAX_COL_WIDTH))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::report::Schema;
+
+    fn report(headers: &[&str], rows: Vec<Vec<&str>>) -> Report {
+        let schema = Schema::from_headers(headers.iter().map(|s| s.to_string()).collect());
+        Report {
+            schema,
+            rows: rows
+                .into_iter()
+                .map(|r| r.into_iter().map(String::from).collect())
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn column_widths_are_clamped_to_range() {
+        let r = report(
+            &["A", "REFERENCE_ASSET_PATH"],
+            vec![vec!["x", &"y".repeat(200)]],
+        );
+        let widths = column_widths(&r);
+        // Short column floored at the minimum; long column capped at the maximum.
+        assert_eq!(widths[0], MIN_COL_WIDTH);
+        assert_eq!(widths[1], MAX_COL_WIDTH);
+    }
+
+    #[test]
+    fn writes_a_workbook_to_disk() {
+        let r = report(
+            &["MATCH_PERCENTAGE", "REF_XUNITS", "CAN_XUNITS"],
+            vec![
+                vec!["100", "mm", "mm"],
+                vec!["80.5", "mm", "in"],
+                vec!["50", "mm", ""],
+            ],
+        );
+        let dir = std::env::temp_dir();
+        let path = dir.join("mra_xlsx_write_test.xlsx");
+        let stats = write_workbook(&r, &path).expect("write should succeed");
+        assert_eq!(stats.rows, 3);
+        assert_eq!(stats.pairs, 1);
+        assert_eq!(stats.different, 2); // the "mm" vs "in" pair, both cells
+        assert_eq!(stats.missing, 2); // the "mm" vs "" pair, both cells
+        assert!(path.exists());
+        let _ = std::fs::remove_file(&path);
+    }
 }
