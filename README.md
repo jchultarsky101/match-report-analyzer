@@ -49,10 +49,11 @@ The generated workbook is styled for readability:
 - **Heat-map gradient** on the `MATCH_PERCENTAGE` column — a color scale from a
   cool blue at 0%, through yellow at 50%, to "red hot" at 100%, so the strongest
   matches stand out at a glance.
-- **Grouped pair headers** — a two-row header groups each `REF_`/`CAN_` pair
-  under a single band showing the field name once (e.g. `XUNITS` over a `REF`
-  and a `CAN` sub-column), making the pairs easy to spot among the plain
-  columns. Unpaired columns span both header rows.
+- **Grouped & boxed pair headers** — a two-row header groups each `REF_`/`CAN_`
+  pair under a single band showing the field name once (e.g. `XUNITS` over a
+  `REF` and a `CAN` sub-column), and a medium border is drawn around each pair
+  from the header down to the last row — so the pairs are unmistakable among the
+  plain columns. Unpaired columns span both header rows.
 - **Styled header** — bold white text on a deep blue band, frozen along with the
   first column so context stays visible while scrolling.
 - **Sized columns** — each column is fit to its content (capped so long URLs

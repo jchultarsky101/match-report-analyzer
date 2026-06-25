@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grouped two-row header: each `REF_`/`CAN_` pair is shown under a merged band
   labeled with the field name once, with `REF`/`CAN` sub-labels beneath, so the
   column pairs are easy to identify. Unpaired columns span both header rows.
+- A medium border box is drawn around each `REF_`/`CAN_` pair, from the header
+  band down through the last data row, further distinguishing the pairs.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.
