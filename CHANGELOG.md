@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic correction of the output file extension to `.xlsx` (with a warning)
   when a different or missing extension is given, so Excel opens the result
   without an "extension doesn't match" warning.
+- Visual presentation of the workbook: rows sorted by `MATCH_PERCENTAGE`
+  (highest first); a heat-map color scale on that column (cool blue at 0% →
+  yellow at 50% → red at 100%, anchored to a fixed 0–100 range); a bold
+  white-on-blue header frozen with the first column; per-content column widths
+  (capped); a named worksheet; and document properties.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.

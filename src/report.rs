@@ -7,6 +7,7 @@
 //! `REFERENCE_ASSET_PATH`, `MATCH_PERCENTAGE`, `COMPARISON_URL`) are plain,
 //! unpaired columns.
 
+use std::cmp::Ordering;
 use std::path::Path;
 
 use crate::error::AppError;
@@ -15,6 +16,11 @@ use crate::error::AppError;
 const REF_PREFIX: &str = "REF_";
 /// Prefix marking a column that holds a *candidate* asset's metadata value.
 const CAN_PREFIX: &str = "CAN_";
+
+/// Header of the geometric similarity column (0–100). The most relevant pairs
+/// have the highest value, so this column drives sorting and the heat-map
+/// gradient in the rendered workbook.
+pub const MATCH_PERCENTAGE_COLUMN: &str = "MATCH_PERCENTAGE";
 
 /// The comparison state of a single `REF_`/`CAN_` cell pair within a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +66,7 @@ pub struct Schema {
 impl Schema {
     /// Builds a [`Schema`] from a header row by pairing `REF_<field>` columns
     /// with their `CAN_<field>` counterparts.
-    fn from_headers(headers: Vec<String>) -> Self {
+    pub(crate) fn from_headers(headers: Vec<String>) -> Self {
         // Map each metadata field name to the column index of its REF_ and CAN_
         // halves (whichever are present).
         let mut ref_cols: Vec<(String, usize)> = Vec::new();
@@ -98,6 +104,11 @@ impl Schema {
     /// The partner column index for `column`, if it participates in a pair.
     pub fn partner(&self, column: usize) -> Option<usize> {
         self.partners.get(column).copied().flatten()
+    }
+
+    /// The index of the column whose header exactly matches `name`, if present.
+    pub fn column_index(&self, name: &str) -> Option<usize> {
+        self.headers.iter().position(|h| h == name)
     }
 
     /// The number of comparable `REF_`/`CAN_` pairs in the schema.
@@ -146,6 +157,28 @@ impl Report {
         }
 
         Ok(Report { schema, rows })
+    }
+
+    /// Sorts the data rows by the numeric value of `column`, descending.
+    ///
+    /// Cells that do not parse as a number (including blanks) are treated as the
+    /// smallest values and sorted to the bottom. The sort is stable, so rows
+    /// that compare equal keep their original relative order.
+    pub fn sort_by_numeric_desc(&mut self, column: usize) {
+        fn numeric(row: &[String], column: usize) -> Option<f64> {
+            row.get(column)
+                .and_then(|cell| cell.trim().parse::<f64>().ok())
+        }
+
+        self.rows.sort_by(|a, b| {
+            match (numeric(a, column), numeric(b, column)) {
+                // Descending: larger value compares "less" so it sorts first.
+                (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(Ordering::Equal),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            }
+        });
     }
 
     /// Classifies the cell at `(row, column)` against its pair partner.
@@ -238,6 +271,31 @@ mod tests {
         // "REFERENCE_..." and "CANDIDATE_..." must not match the REF_/CAN_ prefixes.
         let s = schema(&["REFERENCE_ASSET_PATH", "CANDIDATE_ASSET_PATH"]);
         assert_eq!(s.pair_count(), 0);
+    }
+
+    #[test]
+    fn column_index_finds_exact_header() {
+        let s = schema(&["MATCH_PERCENTAGE", "REF_XUNITS", "CAN_XUNITS"]);
+        assert_eq!(s.column_index("MATCH_PERCENTAGE"), Some(0));
+        assert_eq!(s.column_index("REF_XUNITS"), Some(1));
+        assert_eq!(s.column_index("missing"), None);
+    }
+
+    #[test]
+    fn sort_by_numeric_desc_orders_high_to_low_with_blanks_last() {
+        let s = schema(&["MATCH_PERCENTAGE", "REF_XUNITS", "CAN_XUNITS"]);
+        let mut report = Report {
+            schema: s,
+            rows: vec![
+                vec!["89.79".into(), "a".into(), "a".into()],
+                vec!["".into(), "b".into(), "b".into()],
+                vec!["100".into(), "c".into(), "c".into()],
+                vec!["94.2".into(), "d".into(), "d".into()],
+            ],
+        };
+        report.sort_by_numeric_desc(0);
+        let order: Vec<&str> = report.rows.iter().map(|r| r[0].as_str()).collect();
+        assert_eq!(order, vec!["100", "94.2", "89.79", ""]);
     }
 
     #[test]
