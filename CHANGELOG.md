@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   yellow at 50% → red at 100%, anchored to a fixed 0–100 range); a bold
   white-on-blue header frozen with the first column; per-content column widths
   (capped); a named worksheet; and document properties.
+- Grouped two-row header: each `REF_`/`CAN_` pair is shown under a merged band
+  labeled with the field name once, with `REF`/`CAN` sub-labels beneath, so the
+  column pairs are easy to identify. Unpaired columns span both header rows.
 - Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
   binary, with unit tests for column pairing, cell classification, and argument
   parsing.

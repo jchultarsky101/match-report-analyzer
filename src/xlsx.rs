@@ -24,7 +24,11 @@ const COLOR_DIFFERENT: Color = Color::RGB(0xFFC7CE);
 /// on the other. Excel's standard "neutral" amber fill.
 const COLOR_MISSING: Color = Color::RGB(0xFFEB9C);
 /// Header fill: a deep, professional blue with white text for strong contrast.
+/// Used for the top "group" header band and for unpaired column headers.
 const COLOR_HEADER_BG: Color = Color::RGB(0x1F4E78);
+/// Fill for the second header row (the `REF`/`CAN` sub-labels): a lighter blue
+/// so the two header tiers are visually distinct.
+const COLOR_SUBHEADER_BG: Color = Color::RGB(0x2E6CA4);
 
 /// Heat-map color for the lowest match percentage (0%): a calm, "cool" blue.
 const COLOR_HEAT_LOW: Color = Color::RGB(0x5A8AC6);
@@ -36,8 +40,14 @@ const COLOR_HEAT_HIGH: Color = Color::RGB(0xF8696B);
 /// Number format applied to the match-percentage column.
 const PERCENT_NUM_FORMAT: &str = "0.00";
 
-/// Height (in points) of the header row, giving the title band some presence.
-const HEADER_ROW_HEIGHT: f64 = 28.0;
+/// Height (in points) of each of the two header rows.
+const HEADER_ROW_HEIGHT: f64 = 22.0;
+/// Row index of the top "group" header (field-name band over each pair).
+const GROUP_HEADER_ROW: u32 = 0;
+/// Row index of the second header (per-column `REF`/`CAN` and unpaired names).
+const LABEL_HEADER_ROW: u32 = 1;
+/// Row index where data begins (after the two header rows).
+const DATA_START_ROW: u32 = 2;
 /// Padding (in characters) added to a column's widest content.
 const COL_WIDTH_PADDING: f64 = 2.0;
 /// Narrowest a sized column may be.
@@ -65,10 +75,20 @@ pub struct ConversionStats {
 /// the reference and candidate metadata differ and applying a heat-map gradient
 /// to the match-percentage column.
 pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats, AppError> {
-    let header_format = Format::new()
+    // Top "group" band over each pair, and unpaired column headers (which span
+    // both header rows).
+    let group_format = Format::new()
         .set_bold()
         .set_font_color(Color::White)
         .set_background_color(COLOR_HEADER_BG)
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter)
+        .set_border(FormatBorder::Thin);
+    // Second header row: the per-column REF / CAN sub-labels.
+    let label_format = Format::new()
+        .set_bold()
+        .set_font_color(Color::White)
+        .set_background_color(COLOR_SUBHEADER_BG)
         .set_align(FormatAlign::Center)
         .set_align(FormatAlign::VerticalCenter)
         .set_border(FormatBorder::Thin);
@@ -93,15 +113,62 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
         ..Default::default()
     };
 
-    // Header row.
-    for (col, label) in schema.headers().iter().enumerate() {
-        worksheet.write_with_format(0, col as u16, label, &header_format)?;
+    // Two-row header. The top row carries a merged "group" band showing each
+    // pair's field name once (e.g. `XUNITS` over `REF_XUNITS`/`CAN_XUNITS`); the
+    // second row carries the per-column `REF`/`CAN` sub-labels. Unpaired columns
+    // span both rows. This makes the `REF_`/`CAN_` pairs easy to see and is
+    // never obscured by the data highlights.
+    let headers = schema.headers();
+    let mut col = 0usize;
+    while col < schema.column_count() {
+        match schema.partner(col) {
+            // Left half of an adjacent pair: merge the field-name band across
+            // both columns, then label each column REF / CAN beneath it.
+            Some(partner) if partner == col + 1 => {
+                let field = schema.field_name(col).unwrap_or(headers[col].as_str());
+                worksheet.merge_range(
+                    GROUP_HEADER_ROW,
+                    col as u16,
+                    GROUP_HEADER_ROW,
+                    (col + 1) as u16,
+                    field,
+                    &group_format,
+                )?;
+                worksheet.write_with_format(
+                    LABEL_HEADER_ROW,
+                    col as u16,
+                    side_label(&headers[col]),
+                    &label_format,
+                )?;
+                worksheet.write_with_format(
+                    LABEL_HEADER_ROW,
+                    (col + 1) as u16,
+                    side_label(&headers[col + 1]),
+                    &label_format,
+                )?;
+                col += 2;
+            }
+            // Unpaired (or a non-adjacent pair member): the full column name,
+            // vertically merged across both header rows.
+            _ => {
+                worksheet.merge_range(
+                    GROUP_HEADER_ROW,
+                    col as u16,
+                    LABEL_HEADER_ROW,
+                    col as u16,
+                    &headers[col],
+                    &group_format,
+                )?;
+                col += 1;
+            }
+        }
     }
-    worksheet.set_row_height(0, HEADER_ROW_HEIGHT)?;
+    worksheet.set_row_height(GROUP_HEADER_ROW, HEADER_ROW_HEIGHT)?;
+    worksheet.set_row_height(LABEL_HEADER_ROW, HEADER_ROW_HEIGHT)?;
 
-    // Data rows. The header occupies row 0, so data starts at row 1.
+    // Data rows follow the two header rows.
     for (row_idx, record) in report.rows.iter().enumerate() {
-        let excel_row = (row_idx + 1) as u32;
+        let excel_row = row_idx as u32 + DATA_START_ROW;
         for col in 0..schema.column_count() {
             let value = record.get(col).map(String::as_str).unwrap_or("");
 
@@ -151,14 +218,15 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
         worksheet.set_column_width(col as u16, width)?;
     }
 
-    // Freeze the header row and the first (reference path) column so both stay
-    // visible while scrolling a wide, tall report. Enable an autofilter too.
+    // Freeze both header rows and the first (reference path) column so they stay
+    // visible while scrolling a wide, tall report. Enable an autofilter on the
+    // second (per-column) header row.
     let freeze_col = if schema.column_count() > 0 { 1 } else { 0 };
-    worksheet.set_freeze_panes(1, freeze_col)?;
+    worksheet.set_freeze_panes(DATA_START_ROW, freeze_col)?;
     if schema.column_count() > 0 && !report.rows.is_empty() {
         let last_col = (schema.column_count() - 1) as u16;
-        let last_row = report.rows.len() as u32;
-        worksheet.autofilter(0, 0, last_row, last_col)?;
+        let last_row = report.rows.len() as u32 + LABEL_HEADER_ROW;
+        worksheet.autofilter(LABEL_HEADER_ROW, 0, last_row, last_col)?;
 
         // Heat-map gradient over the match-percentage column: cool at 0%, warm
         // at 50%, red-hot at 100%. Anchored to fixed 0/50/100 so the colors mean
@@ -171,7 +239,13 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
                 .set_minimum_color(COLOR_HEAT_LOW)
                 .set_midpoint_color(COLOR_HEAT_MID)
                 .set_maximum_color(COLOR_HEAT_HIGH);
-            worksheet.add_conditional_format(1, col as u16, last_row, col as u16, &gradient)?;
+            worksheet.add_conditional_format(
+                DATA_START_ROW,
+                col as u16,
+                last_row,
+                col as u16,
+                &gradient,
+            )?;
         }
     }
 
@@ -186,6 +260,15 @@ pub fn write_workbook(report: &Report, output: &Path) -> Result<ConversionStats,
     );
 
     Ok(stats)
+}
+
+/// The short side label (`REF` or `CAN`) for a paired column's header.
+fn side_label(header: &str) -> &'static str {
+    if header.starts_with("REF_") {
+        "REF"
+    } else {
+        "CAN"
+    }
 }
 
 /// Computes a per-column width (in characters) sized to the widest of the header

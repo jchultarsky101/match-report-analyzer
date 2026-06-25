@@ -111,6 +111,19 @@ impl Schema {
         self.headers.iter().position(|h| h == name)
     }
 
+    /// The metadata field name of a paired column — the part after the `REF_` or
+    /// `CAN_` prefix. Returns `None` for columns that are not part of a pair.
+    ///
+    /// For example, both `REF_XUNITS` and `CAN_XUNITS` yield `Some("XUNITS")`,
+    /// and `REF__COST_($)` yields `Some("_COST_($)")`.
+    pub fn field_name(&self, column: usize) -> Option<&str> {
+        self.partner(column)?;
+        let header = self.headers.get(column)?;
+        header
+            .strip_prefix(REF_PREFIX)
+            .or_else(|| header.strip_prefix(CAN_PREFIX))
+    }
+
     /// The number of comparable `REF_`/`CAN_` pairs in the schema.
     pub fn pair_count(&self) -> usize {
         // Each pair is counted twice (once per half), so divide by two.
@@ -271,6 +284,22 @@ mod tests {
         // "REFERENCE_..." and "CANDIDATE_..." must not match the REF_/CAN_ prefixes.
         let s = schema(&["REFERENCE_ASSET_PATH", "CANDIDATE_ASSET_PATH"]);
         assert_eq!(s.pair_count(), 0);
+    }
+
+    #[test]
+    fn field_name_strips_prefix_for_paired_columns_only() {
+        let s = schema(&[
+            "REFERENCE_ASSET_PATH",
+            "REF_XUNITS",
+            "CAN_XUNITS",
+            "REF__COST_($)",
+            "CAN__COST_($)",
+        ]);
+        assert_eq!(s.field_name(0), None); // not paired
+        assert_eq!(s.field_name(1), Some("XUNITS"));
+        assert_eq!(s.field_name(2), Some("XUNITS"));
+        assert_eq!(s.field_name(3), Some("_COST_($)"));
+        assert_eq!(s.field_name(4), Some("_COST_($)"));
     }
 
     #[test]
