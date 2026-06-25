@@ -10,18 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project scaffolding: licensing (MIT OR Apache-2.0), README, contributor
   guide, code of conduct, CI workflow, and editor/formatting configuration.
-- Native desktop GUI built with the [Iced](https://iced.rs/) toolkit, targeting
-  macOS and Windows.
-- Open a match-report CSV via a native file picker, or by passing a path as the
-  first command-line argument; data is loaded read-only into an in-memory SQLite
-  database with automatic column-type inference.
-- Read-only result grid with click-to-sort column headers, a visually distinct
-  (bold, shaded, bordered) header row, zebra-striped data rows, and
-  drag-to-resize column widths.
-- Two ways to query the data, both compiling to SQL against one table: a
-  structured filter builder (column/operator/value conditions joined with
-  AND/OR) and a raw SQL box.
-- Split into a testable library (`store`, `query`) plus a thin GUI binary, with
-  unit tests and a sample-data integration test.
+- Command-line tool that converts a Physna match-report CSV into a
+  color-highlighted Excel (`.xlsx`) workbook, taking the input CSV and output
+  `.xlsx` path as required arguments.
+- Pairing of `REF_<field>` / `CAN_<field>` columns by their shared field name,
+  with per-cell comparison highlighting both halves of a pair when they differ
+  (light red) or when a value is present on only one side (light amber).
+- Faithful text output (values written verbatim, no numeric coercion), a bold
+  frozen header row, and an autofilter over the data range.
+- Structured logging via [`tracing`](https://crates.io/crates/tracing), CLI
+  parsing with [`clap`](https://crates.io/crates/clap) (builder pattern), and
+  typed errors with [`thiserror`](https://crates.io/crates/thiserror).
+- Split into a testable library (`cli`, `report`, `xlsx`, `error`) plus a thin
+  binary, with unit tests for column pairing, cell classification, and argument
+  parsing.
+
+### Changed
+- Replaced the earlier Iced-based desktop GUI prototype (SQLite-backed query
+  grid) with this focused CSV-to-Excel CLI. None of the GUI work was released.
 
 [Unreleased]: https://github.com/jchultarsky101/match-report-analyzer/commits/main

@@ -3,43 +3,42 @@
 [![CI](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-A cross-platform **native desktop application** for analyzing
-[Physna](https://www.physna.com/) geometric **match-report** CSV exports — the
-reports that pair a *reference* asset with one or more *candidate* assets and
-score how geometrically similar they are.
+A small **command-line tool** that converts a
+[Physna](https://www.physna.com/) geometric **match-report** CSV export into a
+**color-highlighted Excel workbook** (`.xlsx`).
 
-It helps you turn a raw export into answers: which parts are likely duplicates,
-which candidates clear a similarity threshold, and how matches are distributed
-across folders, file types, and cost.
+Each row of a match report pairs a *reference* asset with a *candidate* asset.
+The tool highlights, cell by cell, **where their metadata differs** so you can
+scan a large report visually instead of reading every value by hand.
 
-Built in Rust with the [Iced](https://iced.rs/) GUI toolkit, it runs as a single
-native binary on **macOS** and **Windows** (and Linux).
+> **Status:** early development (`0.1.0`).
 
-> **Status:** early development (`0.1.0`). The UI and feature set are not yet
-> stable.
+## How it works
 
-## Why
+Paired metadata lives in columns named with a prefix:
 
-A match report can contain thousands of reference/candidate pairs with columns
-for match percentage, asset paths, units, file types, folders, owners, file
-size, cost, supplier, and a deep-link comparison URL. Reading that by hand in a
-spreadsheet is slow. This app loads the export and lets you filter, sort, and
-summarize it through a point-and-click interface.
+- `REF_<field>` — the reference asset's value for `<field>`
+- `CAN_<field>` — the candidate asset's value for the **same** `<field>`
 
-### Input format
+The text after the prefix is the actual field name and must match between the
+two columns (for example `REF_XUNITS` ↔ `CAN_XUNITS`, or
+`REF__COST_($)` ↔ `CAN__COST_($)`). All other columns
+(`REFERENCE_ASSET_PATH`, `MATCH_PERCENTAGE`, `COMPARISON_URL`, …) are copied
+through unchanged.
 
-The tool consumes the CSV produced by Physna's match report. Each row is a
-reference→candidate pair; key columns include:
+For every `REF_`/`CAN_` pair in each row the tool compares the two values and
+highlights **both** cells:
 
-| Column | Meaning |
-| --- | --- |
-| `REFERENCE_ASSET_PATH` / `CANDIDATE_ASSET_PATH` | Paths of the two compared assets |
-| `MATCH_PERCENTAGE` | Geometric similarity score (0–100) |
-| `REF_X*` / `CAN_X*` | Per-asset metadata (units, file type, folder, owner, size, …) |
-| `REF__COST_($)` / `CAN__COST_($)` | Cost associated with each asset |
-| `COMPARISON_URL` | Deep link to the side-by-side comparison in Physna |
+| Highlight | Color | Meaning |
+| --- | --- | --- |
+| Difference | 🟥 light red (`#FFC7CE`) | both values present but not equal |
+| Missing | 🟨 light amber (`#FFEB9C`) | a value is present on one side only |
+| _(none)_ | — | the values are equal, or the column is not a `REF_`/`CAN_` pair |
 
-See [`data/README.md`](data/README.md) for how to supply your own sample files.
+Values are compared as **trimmed text** and written to Excel verbatim, so the
+exact CSV content is preserved (no numeric coercion, no lost leading zeros or
+precision). The header row is bold and frozen, and an autofilter is enabled for
+convenient inspection.
 
 ## Installation
 
@@ -47,65 +46,51 @@ Requires a recent Rust toolchain (edition 2024, Rust **1.85+**). Install via
 [rustup](https://rustup.rs/).
 
 ```sh
-# From source
 git clone https://github.com/jchultarsky101/match-report-analyzer.git
 cd match-report-analyzer
 cargo build --release
 # Binary at ./target/release/match-report-analyzer (.exe on Windows)
 ```
 
-> Iced renders with wgpu, so a GPU with a working Vulkan/Metal/DX12 driver is
-> recommended. On platforms without one it falls back to software rendering.
-
-Packaged installers (`.dmg` / `.msi`) are planned for tagged releases.
-
 ## Usage
 
-Launch the app:
+```sh
+match-report-analyzer <INPUT_CSV> <OUTPUT_XLSX>
+```
+
+For example:
 
 ```sh
-cargo run --release                      # during development
-cargo run --release -- path/to/report.csv  # open a file on startup
-# or run the built binary directly
+match-report-analyzer data/test-report.csv report.xlsx
 ```
 
-Then:
+Both arguments are required: the input match-report CSV and the path of the
+`.xlsx` file to create. The input file is only read, never modified.
 
-1. **Open report…** loads a Physna match-report CSV. It is parsed into an
-   in-memory table (the source file is never modified) with column types
-   inferred automatically, so numeric columns like `MATCH_PERCENTAGE` compare
-   numerically.
-2. The data appears in a **read-only, sortable grid** — click a column header in
-   *Filter builder* mode to sort by it (toggles ascending → descending → off).
-3. Narrow the data two ways, both feeding the same grid:
-   - **Filter builder** — add point-and-click conditions
-     (`column` · `operator` · `value`) combined with **AND**/**OR**.
-   - **SQL** — type a query directly against the `report` table.
+Options:
 
-For example, "geometric match above 80% but below 99% **and** Material is Steel"
-is either three builder conditions, or:
+| Flag | Description |
+| --- | --- |
+| `-v`, `--verbose` | Increase logging verbosity (`-v` = debug, `-vv` = trace) |
+| `-h`, `--help` | Print help |
+| `-V`, `--version` | Print version |
 
-```sql
-SELECT * FROM report
-WHERE MATCH_PERCENTAGE > 80 AND MATCH_PERCENTAGE < 99 AND Material = 'Steel';
-```
-
-> Column names with spaces or symbols (e.g. `REF__COST_($)`) must be wrapped in
-> double quotes in raw SQL. The grid currently renders up to the first 500
-> matching rows for responsiveness; the status bar reports the full match count.
+Logging is powered by [`tracing`](https://crates.io/crates/tracing); set the
+`RUST_LOG` environment variable for fine-grained control (it overrides `-v`).
 
 ## Architecture
 
-The crate is split into a thin GUI binary over a testable library:
+The crate is a thin CLI binary over a small, testable library:
 
-- `src/store.rs` — loads the CSV into an in-memory **SQLite** database
-  ([`rusqlite`](https://crates.io/crates/rusqlite)) and runs read-only queries.
-- `src/query.rs` — the structured filter model, compiled to a SQL `WHERE` clause.
-- `src/main.rs` — the [Iced](https://iced.rs/) application: toolbar, query tabs,
-  and result grid.
-
-Both the filter builder and the raw SQL box compile to SQL executed against the
-same table, so there is a single query path.
+- `src/cli.rs` — argument parsing with [`clap`](https://crates.io/crates/clap)
+  (builder pattern).
+- `src/report.rs` — reads the CSV, pairs `REF_`/`CAN_` columns, and classifies
+  each cell as equal / different / missing.
+- `src/xlsx.rs` — writes the highlighted workbook with
+  [`rust_xlsxwriter`](https://crates.io/crates/rust_xlsxwriter).
+- `src/error.rs` — error types built with
+  [`thiserror`](https://crates.io/crates/thiserror).
+- `src/lib.rs` / `src/main.rs` — the `convert` entry point and the binary.
 
 ## Development
 
