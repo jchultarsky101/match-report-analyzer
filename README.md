@@ -67,6 +67,11 @@ match-report-analyzer data/test-report.csv report.xlsx
 Both arguments are required: the input match-report CSV and the path of the
 `.xlsx` file to create. The input file is only read, never modified.
 
+> The output is always written in the modern Excel `.xlsx` format. If you give
+> the output a different (or missing) extension — for example the legacy
+> `.xls` — the tool automatically corrects it to `.xlsx` (and logs a warning),
+> so Excel can open the file without an "extension doesn't match" warning.
+
 Options:
 
 | Flag | Description |
