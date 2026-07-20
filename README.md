@@ -153,13 +153,14 @@ mutually similar assets pull together:
   both sides. Identity and organizational fields (`XID`, folder, owner, name)
   are shown in the details but never scored — they say where an asset lives, not
   what it is.
-- **Adjustable blend** — a slider mixes the two scores into each edge's
-  combined strength (default 70% geometry / 30% metadata); stronger matches
-  pull nodes closer and draw brighter, thicker edges. Matches with no shared
-  metadata fall back to geometry alone and are drawn dashed.
-- **Filtering & exploration** — a minimum-score slider prunes weak edges (the
-  constellation re-forms live), a search box highlights assets by name, path,
-  or UUID, and nodes are colored by cluster and sized by match count.
+- **Independent filters** — two sliders set a minimum *geometric* match and a
+  minimum *metadata* match; an edge must satisfy both to stay visible, and the
+  constellation re-forms live as you drag. Matches with no shared metadata are
+  drawn dashed (their strength falls back to geometry) and are hidden as soon
+  as any metadata minimum is set. Stronger matches pull nodes closer and draw
+  brighter, thicker edges.
+- **Exploration** — a search box highlights assets by name, path, or UUID, and
+  nodes are colored by cluster and sized by match count.
 - **Details on click** — selecting an asset lists all its matches with both
   scores, a field-by-field comparison table (colored like the Excel view), and
   the clickable `COMPARISON_URL` deep link.

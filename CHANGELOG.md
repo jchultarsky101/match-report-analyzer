@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The graph's confusing "Score blend" and "Minimum combined score" sliders are
+  replaced by two independent filters: minimum *geometric* match and minimum
+  *metadata* match. An edge must satisfy both to stay visible; edges with no
+  shared metadata (drawn dashed) are hidden once any metadata minimum is set.
+  Edge strength/layout still uses a fixed 70/30 geometry/metadata blend, and
+  the details panel now lists matches by geometry score, showing both scores
+  per match.
+
 ## [0.2.1] - 2026-07-20
 
 ### Changed
