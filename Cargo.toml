@@ -1,6 +1,6 @@
 [package]
 name = "match-report-analyzer"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "A CLI tool that converts a Physna match-report CSV into a color-highlighted Excel workbook, visually flagging where reference (REF_) and candidate (CAN_) metadata differ."
