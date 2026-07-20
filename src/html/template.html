@@ -268,16 +268,16 @@
 </div>
 
 <div class="panel" id="controls">
-  <label>Score blend: <b id="blendLabel"></b></label>
-  <input type="range" id="blend" min="0" max="100" value="70" />
-  <label>Minimum combined score: <b id="thresholdLabel"></b></label>
-  <input type="range" id="threshold" min="0" max="100" value="0" />
+  <label>Geometric match ≥ <b id="geoLabel"></b></label>
+  <input type="range" id="geoMin" min="0" max="100" value="0" />
+  <label>Metadata match ≥ <b id="metaLabel"></b></label>
+  <input type="range" id="metaMin" min="0" max="100" value="0" />
   <label for="search">Find asset</label>
   <input type="search" id="search" placeholder="name, path, or UUID…" />
   <button id="fit">Fit view</button>
   <div id="legend">
     <div><span class="sw"></span>geometry + metadata scored</div>
-    <div><span class="sw dashed"></span>geometry only (no shared metadata)</div>
+    <div><span class="sw dashed"></span>geometry only — no shared metadata; hidden once a metadata minimum is set</div>
     <div>node size = number of matches &middot; color = cluster</div>
     <div>drag nodes &middot; scroll to zoom &middot; click for details</div>
   </div>
@@ -320,21 +320,34 @@ const nodes = DATA.nodes.map((n, i) => ({
 const edges = DATA.edges.map((e) => ({ ...e }));
 for (const e of edges) { nodes[e.source].degree++; nodes[e.target].degree++; }
 
-let blend = 0.7;      // weight of geometry in the combined score
-let threshold = 0;    // minimum combined score for an edge to be shown
+let geoMin = 0;       // minimum geometric match for an edge to be shown
+let metaMin = 0;      // minimum metadata match for an edge to be shown
 let selected = null, hovered = null, searchHits = null;
 
-// Combined score: blend of geometry and metadata agreement. When an edge has
-// no shared metadata to compare, geometry stands in for the metadata term.
+// Fixed blend shaping an edge's visual strength (thickness, brightness, and
+// how close the spring pulls its nodes). Purely presentational — filtering is
+// done per score by the two sliders. When an edge has no shared metadata to
+// compare, geometry stands in for the metadata term.
+const BLEND = 0.7;
 function combined(e) {
   const g = e.geometry ?? 0;
   const m = e.metadata ?? g;
-  return blend * g + (1 - blend) * m;
+  return BLEND * g + (1 - BLEND) * m;
 }
+
+// The two filters are independent and combine as AND. An edge with no shared
+// metadata (metadata == null, drawn dashed) has no metadata score to test, so
+// it is hidden as soon as any metadata minimum is set.
+function passes(e) {
+  if ((e.geometry ?? 0) < geoMin) return false;
+  if (metaMin > 0 && (e.metadata ?? -1) < metaMin) return false;
+  return true;
+}
+const filtering = () => geoMin > 0 || metaMin > 0;
 
 let visible = [], visDegree = [], clusterOf = [], clusterCount = 0;
 function refilter() {
-  visible = edges.filter((e) => combined(e) >= threshold);
+  visible = edges.filter(passes);
   visDegree = nodes.map(() => 0);
   const parent = nodes.map((_, i) => i);
   const find = (i) => {
@@ -440,7 +453,7 @@ const stars = Array.from({ length: 220 }, () => ({
 
 const radius = (n) => 3.5 + 2.1 * Math.sqrt(n.degree);
 const inSearch = (n) => !searchHits || searchHits.has(n.i);
-const dimNode = (n) => !inSearch(n) || (visDegree[n.i] === 0 && threshold > 0);
+const dimNode = (n) => !inSearch(n) || (visDegree[n.i] === 0 && filtering());
 const touches = (e, n) => n && (e.source === n.i || e.target === n.i);
 
 function draw() {
@@ -624,7 +637,7 @@ function select(n) {
   if (!n) { panel.hidden = true; return; }
   const inc = edges
     .filter((e) => e.source === n.i || e.target === n.i)
-    .sort((a, b) => combined(b) - combined(a));
+    .sort((a, b) => (b.geometry ?? 0) - (a.geometry ?? 0));
   let h = `<button class="close" id="closeDetails">×</button>
     <h2>${esc(n.label)}</h2>
     <div class="kv">${esc(n.path)}</div>`;
@@ -637,12 +650,12 @@ function select(n) {
   h += `<h3>${inc.length} match${inc.length === 1 ? "" : "es"}</h3>`;
   for (const e of inc) {
     const other = nodes[e.source === n.i ? e.target : e.source];
-    const s = combined(e);
-    h += `<div class="matchCard${s < threshold ? " below" : ""}">
+    const hidden = !passes(e);
+    h += `<div class="matchCard${hidden ? " below" : ""}">
       <span class="mname" data-node="${other.i}">${esc(other.label)}</span>
-      <div class="scores">combined <b>${s.toFixed(1)}%</b> · geometry ${fmtPct(e.geometry)} ·
-        metadata ${e.metadata == null ? "—" : `${fmtPct(e.metadata)} (${e.matched}/${e.comparable})`}
-        ${s < threshold ? " · below threshold" : ""}</div>
+      <div class="scores">geometry <b>${fmtPct(e.geometry)}</b> ·
+        metadata <b>${e.metadata == null ? "—" : `${fmtPct(e.metadata)} (${e.matched}/${e.comparable})`}</b>
+        ${hidden ? " · hidden by filters" : ""}</div>
       ${e.url ? `<a class="cmp" href="${esc(e.url)}" target="_blank" rel="noopener">Open comparison ↗</a>` : ""}
       ${fieldTable(e)}
     </div>`;
@@ -656,26 +669,23 @@ function select(n) {
 }
 
 // ---- controls --------------------------------------------------------------
-function updateBlendLabel() {
-  const g = Math.round(blend * 100);
-  el("blendLabel").textContent = `${g}% geometry / ${100 - g}% metadata`;
+function updateFilterLabels() {
+  el("geoLabel").textContent = `${geoMin}%`;
+  el("metaLabel").textContent = `${metaMin}%`;
 }
-function updateThresholdLabel() {
-  el("thresholdLabel").textContent = `${threshold}%`;
-}
-el("blend").addEventListener("input", (ev) => {
-  blend = ev.target.value / 100;
-  updateBlendLabel();
+function onFilterChange() {
+  updateFilterLabels();
   refilter();
   reheat(0.5);
   if (selected) select(selected);
+}
+el("geoMin").addEventListener("input", (ev) => {
+  geoMin = +ev.target.value;
+  onFilterChange();
 });
-el("threshold").addEventListener("input", (ev) => {
-  threshold = +ev.target.value;
-  updateThresholdLabel();
-  refilter();
-  reheat(0.5);
-  if (selected) select(selected);
+el("metaMin").addEventListener("input", (ev) => {
+  metaMin = +ev.target.value;
+  onFilterChange();
 });
 el("search").addEventListener("input", (ev) => {
   const term = ev.target.value.trim().toLowerCase();
@@ -692,8 +702,7 @@ el("fit").addEventListener("click", () => { userAdjustedView = false; fit(); });
 
 // ---- init ------------------------------------------------------------------
 el("source").textContent = DATA.source;
-updateBlendLabel();
-updateThresholdLabel();
+updateFilterLabels();
 refilter();
 if (!nodes.length) {
   const empty = document.createElement("div");
