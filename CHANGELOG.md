@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `grid` subcommand: renders the report as a single-page interactive data
+  grid mirroring the Excel view (grouped pair headers, match/difference/missing
+  cell colors, heat-mapped `MATCH_PERCENTAGE`, frozen identity columns,
+  clickable comparison links) in one self-contained HTML file. Adds live
+  exploration: search by asset name/path/UUID, numeric-aware column sorting, a
+  SQL-like `WHERE` filter (`=`, `!=`, `<`, `<=`, `>`, `>=`, `LIKE`, `IN`,
+  `BETWEEN`, `IS [NOT] NULL`, `AND`/`OR`/`NOT`, parentheses, column-to-column
+  comparisons, quoted column names) with inline error messages and a built-in
+  syntax-help panel, and in-place "what-if" cell editing that re-classifies and
+  re-colors the pair and updates the tallies instantly, with one-click reset.
+- New `graph` subcommand: analyzes the match report as a similarity graph and
+  writes a single self-contained interactive HTML document (no external
+  dependencies, works offline). Assets are deduplicated into nodes by UUID
+  (`XID`) when known, falling back to their path; duplicate and reversed
+  matches merge into one undirected edge; self-matches are skipped.
+- Each match carries two scores: the geometric `MATCH_PERCENTAGE` and a
+  metadata-agreement score over the *intrinsic* `REF_`/`CAN_` field pairs
+  present on both sides. Identity/organizational fields (`XID`, folder, owner,
+  name) are displayed but never scored.
+- The page renders a force-directed "constellation": nodes colored by cluster
+  and sized by match count, edge strength from an adjustable geometry/metadata
+  blend (default 70/30), dashed edges for matches with no shared metadata, a
+  minimum-score filter that re-forms the constellation live, search by
+  name/path/UUID, hover tooltips, and a per-asset details panel with
+  field-by-field comparison tables and the `COMPARISON_URL` deep link.
+
+### Changed
+- **Breaking:** the CSV-to-Excel conversion now lives under the `xlsx`
+  subcommand (`match-report-analyzer xlsx <INPUT_CSV> <OUTPUT_XLSX>`) instead
+  of being the top-level invocation, making room for upcoming commands that
+  generate other file types. The `-v`/`--verbose` flag is global and may be
+  given before or after the subcommand; the `help` subcommand is now the one
+  clap provides (`help [COMMAND]` also prints subcommand help).
+- The similarity-graph subcommand is named `graph` (it was briefly `html`
+  during development, before a second HTML-producing command existed; `html`
+  remains as a hidden alias).
+- **Breaking (library):** `convert` is now `convert_to_xlsx` (joined by
+  `convert_to_graph` and `convert_to_grid`), and `normalize_output_path` takes
+  the target extension as a parameter since each subcommand writes a different
+  format.
+
 ## [0.1.0] - 2026-06-25
 
 ### Added

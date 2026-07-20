@@ -14,6 +14,10 @@ keywords = ["physna", "csv", "xlsx", "cli", "diff"]
 categories = ["command-line-utilities", "visualization"]
 exclude = ["/data", "/.github"]
 
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
 [profile.release]
 lto = true
 strip = true

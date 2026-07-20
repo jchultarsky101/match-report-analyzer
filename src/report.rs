@@ -13,7 +13,7 @@ use std::path::Path;
 use crate::error::AppError;
 
 /// Prefix marking a column that holds a *reference* asset's metadata value.
-const REF_PREFIX: &str = "REF_";
+pub(crate) const REF_PREFIX: &str = "REF_";
 /// Prefix marking a column that holds a *candidate* asset's metadata value.
 const CAN_PREFIX: &str = "CAN_";
 

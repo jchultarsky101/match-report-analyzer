@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Match Report — Data Grid</title>
+<style>
+  /* ---- drafting-instrument theme ---------------------------------------- */
+  :root {
+    --paper: #f4f1e9;          /* warm drafting paper */
+    --paper-raised: #fdfcf8;
+    --paper-zebra: #f7f4ec;
+    --paper-hover: #f0e9d8;
+    --ink: #1d2733;            /* blue-black ink */
+    --ink-soft: #66707e;
+    --hairline: #e0dccd;
+    --band: #16324f;           /* deep slate-blue nameplate */
+    --band-2: #24466b;
+    --band-ink: #e9eef5;
+    --band-ink-dim: #9fb2c8;
+    --copper: #b4690e;         /* instrument brass */
+    --copper-deep: #8f5106;
+    --copper-wash: #f7ead2;
+    --match-bg: #d8eedb; --match-ink: #17603a;
+    --diff-bg:  #fadfe3; --diff-ink:  #9c2438;
+    --miss-bg:  #fcefcb; --miss-ink:  #7a5a00;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Cascadia Code", monospace;
+    --sans: "Avenir Next", Avenir, Seravek, "Gill Sans", Corbel, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--ink);
+    background:
+      repeating-linear-gradient(0deg, rgba(22, 50, 79, 0.025) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, rgba(22, 50, 79, 0.025) 0 1px, transparent 1px 28px),
+      var(--paper);
+    font: 13px/1.45 var(--sans);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    #bar { animation: settle 0.45s ease both; }
+    #wrap { animation: settle 0.55s 0.08s ease both; }
+    @keyframes settle { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  }
+
+  /* ---- toolbar ----------------------------------------------------------- */
+  #bar {
+    flex: none;
+    padding: 14px 18px 0;
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--hairline);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 6px 18px -14px rgba(29, 39, 51, 0.5);
+  }
+  #titleRow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #brand { display: flex; align-items: center; gap: 12px; }
+  #mark {
+    width: 30px; height: 30px;
+    border: 1.5px solid var(--band);
+    border-radius: 50%;
+    background:
+      linear-gradient(var(--band) 0 0) center / 1.5px 30px no-repeat,
+      linear-gradient(var(--band) 0 0) center / 30px 1.5px no-repeat,
+      radial-gradient(circle at center, var(--copper) 0 3.5px, transparent 4px);
+  }
+  h1 {
+    margin: 0;
+    font: 600 15px/1.2 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  h1 em { font-style: normal; color: var(--copper); }
+  #source {
+    margin-top: 3px;
+    font: 11px/1 var(--mono);
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+  }
+  #source::before { content: "◂ "; color: var(--copper); }
+  #stats { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .stat {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: var(--paper);
+    font: 11px/1.2 var(--mono);
+    color: var(--ink-soft);
+  }
+  .stat b { font-size: 13px; color: var(--ink); font-weight: 600; }
+  .stat i { font-style: normal; }
+  .stat::before { content: ""; width: 7px; height: 7px; border-radius: 2px; align-self: center; }
+  .stat.s-r::before { background: var(--band); }
+  .stat.s-m::before { background: var(--match-ink); }
+  .stat.s-d::before { background: var(--diff-ink); }
+  .stat.s-x::before { background: var(--miss-ink); }
+  .stat.s-e::before { background: var(--copper); }
+
+  #controlRow { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: stretch; }
+  input {
+    font: 12px/1.3 var(--mono);
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: inset 0 1px 2px rgba(29, 39, 51, 0.06);
+  }
+  input::placeholder { color: #a4a89e; }
+  input:focus { outline: none; border-color: var(--copper); box-shadow: inset 0 1px 2px rgba(29,39,51,0.06), 0 0 0 3px var(--copper-wash); }
+  #search { width: 250px; }
+  #filterWrap { flex: 1; min-width: 300px; display: flex; }
+  #filterWrap .kw {
+    display: flex; align-items: center;
+    padding: 0 10px;
+    border: 1px solid var(--band);
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    background: var(--band);
+    color: var(--band-ink);
+    font: 600 10.5px var(--mono);
+    letter-spacing: 0.12em;
+  }
+  #filter { flex: 1; border-radius: 0 8px 8px 0; }
+  button {
+    font: 600 10.5px/1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 0 14px;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
+  }
+  button:hover { background: #fff; box-shadow: 0 2px 8px -3px rgba(29, 39, 51, 0.35); transform: translateY(-1px); }
+  button:active { transform: none; box-shadow: none; }
+  #apply { background: var(--copper); border-color: var(--copper-deep); color: #fff8ec; }
+  #apply:hover { background: var(--copper-deep); }
+  #resetEdits { color: var(--copper-deep); border-color: var(--copper); background: var(--copper-wash); }
+
+  #filterError {
+    display: none;
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--diff-ink);
+    background: var(--diff-bg);
+    color: var(--diff-ink);
+    font: 12px var(--mono);
+    border-radius: 0 6px 6px 0;
+  }
+  #help {
+    margin-top: 10px;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--paper);
+    max-height: 280px;
+    overflow: auto;
+  }
+  #help h3 {
+    margin: 10px 0 5px;
+    font: 600 10px var(--mono);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--copper-deep);
+  }
+  #help h3:first-child { margin-top: 0; }
+  #help p { margin: 4px 0; color: var(--ink); line-height: 1.9; }
+  #help code {
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 2px 7px;
+    font: 11.5px var(--mono);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #help code:hover { border-color: var(--copper); color: var(--copper-deep); }
+
+  #legend {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    margin-top: 10px;
+    padding: 8px 2px 10px;
+    color: var(--ink-soft);
+    font-size: 12px;
+    /* ruler ticks along the toolbar's lower edge */
+    background: repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 9px) left bottom / 100% 5px no-repeat;
+  }
+  .chip {
+    display: inline-block; width: 12px; height: 12px;
+    border-radius: 3px; margin-right: 5px; vertical-align: -2px;
+    border: 1px solid rgba(29, 39, 51, 0.18);
+  }
+  #legend .hint { margin-left: auto; font: 11px var(--mono); color: var(--ink-soft); }
+
+  /* ---- the grid ---------------------------------------------------------- */
+  #wrap { flex: 1; overflow: auto; }
+  #wrap::-webkit-scrollbar { width: 11px; height: 11px; }
+  #wrap::-webkit-scrollbar-track { background: var(--paper); }
+  #wrap::-webkit-scrollbar-thumb { background: #cdc6b2; border-radius: 6px; border: 2px solid var(--paper); }
+  #wrap::-webkit-scrollbar-thumb:hover { background: var(--copper); }
+  table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
+  th, td {
+    border-right: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    padding: 5px 9px;
+    white-space: nowrap;
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  td { background: var(--paper-raised); }
+  thead th {
+    position: sticky; z-index: 3;
+    background: linear-gradient(var(--band), #122a43);
+    color: var(--band-ink);
+    font: 600 10.5px/1.3 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+    height: 30px;
+    border-right-color: rgba(233, 238, 245, 0.14);
+    border-bottom-color: rgba(233, 238, 245, 0.18);
+  }
+  thead tr:first-child th { top: 0; }
+  thead th[rowspan="2"] { height: 60px; }
+  thead tr:last-child th {
+    top: 30px;
+    background: linear-gradient(var(--band-2), #1d3c5e);
+    color: var(--band-ink-dim);
+  }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: #ffffff; }
+  th .dir { color: #ffb35c; margin-left: 4px; }
+  #grid.scrolled thead tr:last-child th, #grid.scrolled thead th[rowspan="2"] {
+    box-shadow: 0 6px 12px -6px rgba(18, 42, 67, 0.55);
+  }
+  tbody tr:nth-child(even) td { background: var(--paper-zebra); }
+  tbody tr:hover td { background: var(--paper-hover); }
+  td.fz, th.fz { position: sticky; z-index: 2; max-width: 240px; }
+  thead th.fz { z-index: 4; }
+  td.path { font: 11px var(--mono); color: #33435a; }
+  td:not(.fz) { position: relative; }
+  td.s-match { background: var(--match-bg) !important; color: var(--match-ink); }
+  td.s-different { background: var(--diff-bg) !important; color: var(--diff-ink); font-weight: 500; }
+  td.s-missing { background: var(--miss-bg) !important; color: var(--miss-ink); }
+  .pl { border-left: 2px solid #9db0c3; }
+  .pr { border-right: 2px solid #9db0c3; }
+  thead tr:first-child th.band { border-top: 2px solid #9db0c3; }
+  tbody tr:last-child td.pl, tbody tr:last-child td.pr { border-bottom: 2px solid #9db0c3; }
+  td.num { text-align: right; font: 600 11.5px var(--mono); font-variant-numeric: tabular-nums; }
+  .pct {
+    display: inline-block;
+    min-width: 64px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #1d2733;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  td.edited { box-shadow: inset 0 0 0 1.5px var(--copper); }
+  td.edited::after {
+    content: "";
+    position: absolute; top: 0; right: 0;
+    border: 4.5px solid var(--copper);
+    border-left-color: transparent;
+    border-bottom-color: transparent;
+  }
+  td a { color: var(--band-2); font: 11px var(--mono); text-decoration-color: #9db0c3; }
+  td a:hover { color: var(--copper-deep); text-decoration-color: var(--copper); }
+  td[contenteditable="true"], td[contenteditable="plaintext-only"] {
+    outline: 2px solid var(--copper);
+    outline-offset: -2px;
+    background: #fff !important;
+    white-space: normal;
+    max-width: none;
+  }
+  #noRows { padding: 42px; color: var(--ink-soft); text-align: center; font: 13px var(--mono); background: transparent; }
+</style>
+</head>
+<body>
+<header id="bar">
+  <div id="titleRow">
+    <div id="brand">
+      <div id="mark" aria-hidden="true"></div>
+      <div>
+        <h1>Match Report <em>/ Data Grid</em></h1>
+        <div id="source"></div>
+      </div>
+    </div>
+    <div id="stats"></div>
+  </div>
+  <div id="controlRow">
+    <input type="search" id="search" placeholder="search name, path, or UUID…" />
+    <div id="filterWrap">
+      <span class="kw">WHERE</span>
+      <input type="text" id="filter" placeholder="MATCH_PERCENTAGE > 90 AND REF_XUNITS != CAN_XUNITS" spellcheck="false" />
+    </div>
+    <button id="apply">Apply</button>
+    <button id="clear">Clear</button>
+    <button id="helpBtn">Syntax</button>
+    <button id="resetEdits" hidden>Reset edits</button>
+  </div>
+  <div id="filterError"></div>
+  <div id="help" hidden></div>
+  <div id="legend">
+    <span><span class="chip" style="background:var(--match-bg)"></span>values match</span>
+    <span><span class="chip" style="background:var(--diff-bg)"></span>values differ</span>
+    <span><span class="chip" style="background:var(--miss-bg)"></span>one side only</span>
+    <span><span class="chip" style="background:var(--copper-wash); box-shadow: inset 0 0 0 1.5px var(--copper)"></span>edited (what-if)</span>
+    <span class="hint">double-click a cell to edit · click a header to sort</span>
+  </div>
+</header>
+<div id="wrap"><table id="grid"><thead></thead><tbody></tbody></table></div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+if (!DATA) {
+  // This is the raw template: no report has been embedded.
+  document.getElementById("wrap").innerHTML =
+    "<div id='noRows'>No report data is embedded in this page. Generate it with " +
+    "<b>match-report-analyzer grid &lt;INPUT_CSV&gt; &lt;OUTPUT_HTML&gt;</b> " +
+    "and open the generated file.</div>";
+  throw new Error("no embedded report data");
+}
+
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---- model -----------------------------------------------------------------
+const cols = DATA.columns;
+// Editable working copy per row; `original` backs the what-if reset.
+const rows = DATA.rows.map((cells, idx) => ({ cells: cells.slice(), original: cells, idx }));
+// One entry per pair, keyed by its REF column.
+const refPairs = cols
+  .map((c, i) => ({ ...c, i }))
+  .filter((c) => c.side === "ref")
+  .map((c) => [c.i, c.partner]);
+
+// Mirrors the Rust classifier: trimmed, case-sensitive comparison.
+function classify(ref, can) {
+  ref = ref.trim();
+  can = can.trim();
+  if (!ref && !can) return null;
+  if (ref === can) return "match";
+  if (!ref || !can) return "missing";
+  return "different";
+}
+
+function rowStates(row) {
+  const states = new Array(cols.length).fill(null);
+  for (const [r, c] of refPairs) {
+    const s = classify(row.cells[r], row.cells[c]);
+    states[r] = s;
+    states[c] = s;
+  }
+  return states;
+}
+
+// ---- SQL-like filter: tokenizer -------------------------------------------
+const KEYWORDS = new Set([
+  "AND", "OR", "NOT", "LIKE", "IN", "IS", "NULL", "BETWEEN", "TRUE", "FALSE",
+]);
+
+function filterError(message, pos) {
+  const e = new Error(pos == null ? message : `${message} (at position ${pos + 1})`);
+  e.filter = true;
+  return e;
+}
+
+function tokenize(src) {
+  const tokens = [];
+  let i = 0;
+  const last = () => tokens[tokens.length - 1];
+  const valueEnded = () =>
+    last() && (last().t === "ident" || last().t === "str" || last().t === "num" || last().t === "rparen");
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === "(") { tokens.push({ t: "lparen", pos: i++ }); continue; }
+    if (c === ")") { tokens.push({ t: "rparen", pos: i++ }); continue; }
+    if (c === ",") { tokens.push({ t: "comma", pos: i++ }); continue; }
+    if (c === "'") {
+      let j = i + 1, v = "";
+      for (;;) {
+        if (j >= src.length) throw filterError("unterminated string — close it with '", i);
+        if (src[j] === "'") {
+          if (src[j + 1] === "'") { v += "'"; j += 2; } else { j++; break; }
+        } else v += src[j++];
+      }
+      tokens.push({ t: "str", v, pos: i });
+      i = j;
+      continue;
+    }
+    if (c === '"' || c === "`" || c === "[") {
+      const close = c === "[" ? "]" : c;
+      const j = src.indexOf(close, i + 1);
+      if (j < 0) throw filterError(`unterminated quoted column name — close it with ${close}`, i);
+      tokens.push({ t: "ident", v: src.slice(i + 1, j), pos: i });
+      i = j + 1;
+      continue;
+    }
+    const num = /^-?(\d+(\.\d+)?|\.\d+)/.exec(src.slice(i));
+    if (num && (c !== "-" || !valueEnded())) {
+      tokens.push({ t: "num", v: Number(num[0]), pos: i });
+      i += num[0].length;
+      continue;
+    }
+    const op = ["<=", ">=", "!=", "<>", "=", "<", ">"].find((o) => src.startsWith(o, i));
+    if (op) {
+      tokens.push({ t: "op", v: op === "<>" ? "!=" : op, pos: i });
+      i += op.length;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i + 1;
+      while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j++;
+      const word = src.slice(i, j);
+      const upper = word.toUpperCase();
+      tokens.push(KEYWORDS.has(upper) ? { t: "kw", v: upper, pos: i } : { t: "ident", v: word, pos: i });
+      i = j;
+      continue;
+    }
+    throw filterError(
+      `unexpected character '${c}' — quote column names containing symbols, e.g. "REF__COST_($)"`, i);
+  }
+  return tokens;
+}
+
+// ---- SQL-like filter: parser ----------------------------------------------
+const colByName = new Map(cols.map((c, i) => [c.name.toUpperCase(), i]));
+
+function parse(src) {
+  const tokens = tokenize(src);
+  let p = 0;
+  const peek = () => tokens[p];
+  const next = () => tokens[p++];
+  const atKw = (v) => peek() && peek().t === "kw" && peek().v === v;
+  const eatKw = (v) => (atKw(v) ? (p++, true) : false);
+
+  function resolve(tok) {
+    const idx = colByName.get(tok.v.toUpperCase());
+    if (idx == null) {
+      const near = cols
+        .map((c) => c.name)
+        .filter((n) => n.toUpperCase().includes(tok.v.toUpperCase()))
+        .slice(0, 3);
+      throw filterError(
+        `unknown column ${JSON.stringify(tok.v)}${near.length ? ` — did you mean ${near.join(", ")}?` : ""}`,
+        tok.pos);
+    }
+    return idx;
+  }
+
+  function parseOperand() {
+    const tok = next();
+    if (!tok) throw filterError("expected a column name or value at the end of the filter");
+    if (tok.t === "ident") return { col: resolve(tok) };
+    if (tok.t === "str") return { lit: tok.v };
+    if (tok.t === "num") return { lit: String(tok.v) };
+    if (tok.t === "kw" && (tok.v === "TRUE" || tok.v === "FALSE")) return { lit: tok.v.toLowerCase() };
+    throw filterError("expected a column name or value", tok.pos);
+  }
+
+  function parsePrimary() {
+    if (peek() && peek().t === "lparen") {
+      next();
+      const inner = parseOr();
+      if (!peek() || next().t !== "rparen") throw filterError("expected ')'", peek() && peek().pos);
+      return inner;
+    }
+    const left = parseOperand();
+    if (eatKw("IS")) {
+      const negated = eatKw("NOT");
+      if (!eatKw("NULL")) throw filterError("expected NULL after IS", peek() && peek().pos);
+      return { isNull: left, negated };
+    }
+    const negated = eatKw("NOT");
+    if (eatKw("LIKE")) return { like: [left, parseOperand()], negated };
+    if (eatKw("IN")) {
+      if (!peek() || next().t !== "lparen") throw filterError("expected '(' after IN", peek() && peek().pos);
+      const list = [parseOperand()];
+      while (peek() && peek().t === "comma") { next(); list.push(parseOperand()); }
+      if (!peek() || next().t !== "rparen") throw filterError("expected ')' to close IN list", peek() && peek().pos);
+      return { in: [left, list], negated };
+    }
+    if (eatKw("BETWEEN")) {
+      const lo = parseOperand();
+      if (!eatKw("AND")) throw filterError("expected AND in BETWEEN", peek() && peek().pos);
+      return { between: [left, lo, parseOperand()], negated };
+    }
+    if (negated) throw filterError("expected LIKE, IN, or BETWEEN after NOT", peek() && peek().pos);
+    const tok = next();
+    if (!tok || tok.t !== "op") {
+      throw filterError("expected a comparison (=, !=, <, <=, >, >=, LIKE, IN, BETWEEN, IS NULL)",
+        tok && tok.pos);
+    }
+    return { cmp: [tok.v, left, parseOperand()] };
+  }
+
+  function parseNot() {
+    if (eatKw("NOT")) return { not: parseNot() };
+    return parsePrimary();
+  }
+  function parseAnd() {
+    let node = parseNot();
+    while (eatKw("AND")) node = { and: [node, parseNot()] };
+    return node;
+  }
+  function parseOr() {
+    let node = parseAnd();
+    while (eatKw("OR")) node = { or: [node, parseAnd()] };
+    return node;
+  }
+
+  const ast = parseOr();
+  if (peek()) throw filterError("unexpected trailing input", peek().pos);
+  return ast;
+}
+
+// ---- SQL-like filter: evaluator -------------------------------------------
+// NULL is a blank cell; any comparison with NULL is false (except IS NULL).
+function operandVal(o, row) {
+  if ("col" in o) {
+    const v = row.cells[o.col].trim();
+    return v === "" ? null : v;
+  }
+  return o.lit;
+}
+
+function compareVals(a, b) {
+  const na = Number(a), nb = Number(b);
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na < nb ? -1 : na > nb ? 1 : 0;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function likeRegex(pattern) {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped.replace(/%/g, ".*").replace(/_/g, ".")}$`, "i");
+}
+
+function evalNode(node, row) {
+  if ("and" in node) return evalNode(node.and[0], row) && evalNode(node.and[1], row);
+  if ("or" in node) return evalNode(node.or[0], row) || evalNode(node.or[1], row);
+  if ("not" in node) return !evalNode(node.not, row);
+  if ("isNull" in node) {
+    const isNull = operandVal(node.isNull, row) === null;
+    return node.negated ? !isNull : isNull;
+  }
+  if ("like" in node) {
+    const [l, r] = node.like.map((o) => operandVal(o, row));
+    const hit = l !== null && r !== null && likeRegex(r).test(l);
+    return node.negated ? !hit : hit;
+  }
+  if ("in" in node) {
+    const v = operandVal(node.in[0], row);
+    const hit = v !== null && node.in[1].some((o) => {
+      const item = operandVal(o, row);
+      return item !== null && compareVals(v, item) === 0;
+    });
+    return node.negated ? !hit : hit;
+  }
+  if ("between" in node) {
+    const [v, lo, hi] = node.between.map((o) => operandVal(o, row));
+    const hit = v !== null && lo !== null && hi !== null &&
+      compareVals(v, lo) >= 0 && compareVals(v, hi) <= 0;
+    return node.negated ? !hit : hit;
+  }
+  const [op, l, r] = node.cmp;
+  const a = operandVal(l, row), b = operandVal(r, row);
+  if (a === null || b === null) return false;
+  const c = compareVals(a, b);
+  switch (op) {
+    case "=": return c === 0;
+    case "!=": return c !== 0;
+    case "<": return c < 0;
+    case "<=": return c <= 0;
+    case ">": return c > 0;
+    case ">=": return c >= 0;
+  }
+  return false;
+}
+
+// ---- heat map for the match-percentage column ------------------------------
+const HEAT = [[0, [0x5a, 0x8a, 0xc6]], [50, [0xff, 0xeb, 0x84]], [100, [0xf8, 0x69, 0x6b]]];
+function heatColor(v) {
+  v = Math.max(0, Math.min(100, v));
+  const hi = HEAT.findIndex(([stop]) => v <= stop);
+  if (hi <= 0) return `rgb(${HEAT[hi < 0 ? HEAT.length - 1 : 0][1].join(",")})`;
+  const [s0, c0] = HEAT[hi - 1], [s1, c1] = HEAT[hi];
+  const t = (v - s0) / (s1 - s0);
+  return `rgb(${c0.map((x, k) => Math.round(x + (c1[k] - x) * t)).join(",")})`;
+}
+
+// ---- header ----------------------------------------------------------------
+const frozen = [];
+for (let i = 0; i <= (DATA.matchCol ?? 0) && i < cols.length; i++) frozen.push(i);
+
+const sort = { col: DATA.matchCol, dir: -1 };
+
+function buildHeader() {
+  let top = "", bottom = "";
+  const fz = (i) => (frozen.includes(i) ? ` fz c${i}` : "");
+  for (let i = 0; i < cols.length; ) {
+    const c = cols[i];
+    if (c.side === "ref" && c.partner === i + 1) {
+      top += `<th colspan="2" class="band pl pr">${esc(c.field)}</th>`;
+      bottom += `<th class="sortable pl" data-c="${i}" data-lbl="REF" title="${esc(c.name)}">REF</th>`;
+      bottom += `<th class="sortable pr" data-c="${i + 1}" data-lbl="CAN" title="${esc(cols[i + 1].name)}">CAN</th>`;
+      i += 2;
+    } else {
+      top += `<th rowspan="2" class="sortable${fz(i)}" data-c="${i}" data-lbl="${esc(c.name)}">${esc(c.name)}</th>`;
+      i += 1;
+    }
+  }
+  document.querySelector("#grid thead").innerHTML = `<tr>${top}</tr><tr>${bottom}</tr>`;
+  for (const th of document.querySelectorAll("th.sortable")) {
+    th.addEventListener("click", () => {
+      const col = +th.dataset.c;
+      if (sort.col === col) {
+        sort.dir = -sort.dir;
+      } else {
+        sort.col = col;
+        // Match percentage reads best highest-first; everything else ascending.
+        sort.dir = col === DATA.matchCol ? -1 : 1;
+      }
+      refresh();
+    });
+  }
+}
+
+function updateSortArrows() {
+  for (const th of document.querySelectorAll("th.sortable")) {
+    const base = esc(th.dataset.lbl);
+    th.innerHTML = +th.dataset.c === sort.col
+      ? `${base}<span class="dir">${sort.dir > 0 ? "▴" : "▾"}</span>`
+      : base;
+  }
+}
+
+// ---- body ------------------------------------------------------------------
+function sortRows(list) {
+  const col = sort.col, dir = sort.dir;
+  return list
+    .map((r, i) => [r, i])
+    .sort(([ra, ia], [rb, ib]) => {
+      const a = ra.cells[col].trim(), b = rb.cells[col].trim();
+      if (!a || !b) return !a && !b ? ia - ib : !a ? 1 : -1; // blanks always last
+      const c = compareVals(a, b);
+      return c ? c * dir : ia - ib;
+    })
+    .map(([r]) => r);
+}
+
+function cellHtml(row, ci, states) {
+  const raw = row.cells[ci];
+  const edited = raw !== row.original[ci];
+  const classes = [];
+  if (states[ci]) classes.push(`s-${states[ci]}`);
+  if (frozen.includes(ci)) {
+    classes.push("fz", `c${ci}`);
+    if (ci !== DATA.matchCol) classes.push("path");
+  }
+  if (cols[ci].side === "ref") classes.push("pl");
+  if (cols[ci].side === "can") classes.push("pr");
+  if (edited) classes.push("edited");
+  const title = edited ? `edited — was “${row.original[ci]}”` : raw;
+  if (ci === DATA.matchCol) {
+    classes.push("num");
+    const n = Number(raw.trim());
+    if (raw.trim() && !Number.isNaN(n)) {
+      return `<td class="${classes.join(" ")}" data-r="${row.idx}" data-c="${ci}" title="${esc(title)}">` +
+        `<span class="pct" style="background:${heatColor(n)}">${esc(n.toFixed(2))}</span></td>`;
+    }
+  }
+  if (ci === DATA.urlCol && !edited) {
+    const link = raw.trim();
+    if (/^https?:\/\//.test(link) && link.length <= 2080) {
+      return `<td data-r="${row.idx}" data-c="${ci}"><a href="${esc(link)}" target="_blank" rel="noopener" title="${esc(link)}">open comparison ↗</a></td>`;
+    }
+  }
+  return `<td class="${classes.join(" ")}" data-r="${row.idx}" data-c="${ci}" title="${esc(title)}">${esc(raw)}</td>`;
+}
+
+function renderBody(list) {
+  const tbody = document.querySelector("#grid tbody");
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td id="noRows" colspan="${cols.length}">No rows match the current search/filter.</td></tr>`;
+    return;
+  }
+  let html = "";
+  for (const row of list) {
+    const states = rowStates(row);
+    html += "<tr>";
+    for (let ci = 0; ci < cols.length; ci++) html += cellHtml(row, ci, states);
+    html += "</tr>";
+  }
+  tbody.innerHTML = html;
+}
+
+function renderStats(list) {
+  let match = 0, diff = 0, miss = 0;
+  for (const row of list) {
+    for (const s of rowStates(row)) {
+      if (s === "match") match++;
+      else if (s === "different") diff++;
+      else if (s === "missing") miss++;
+    }
+  }
+  let edited = 0;
+  for (const row of rows) {
+    for (let ci = 0; ci < cols.length; ci++) if (row.cells[ci] !== row.original[ci]) edited++;
+  }
+  const stat = (cls, value, label) =>
+    `<span class="stat ${cls}"><b>${value}</b>${label}</span>`;
+  el("stats").innerHTML =
+    stat("s-r", `${list.length}<i>/${rows.length}</i>`, "rows") +
+    stat("s-m", match, "match") +
+    stat("s-d", diff, "differ") +
+    stat("s-x", miss, "missing") +
+    (edited ? stat("s-e", edited, "edited") : "");
+  el("resetEdits").hidden = !edited;
+}
+
+function measureFrozen() {
+  let left = 0;
+  for (const ci of frozen) {
+    const cells = document.querySelectorAll(`.c${ci}`);
+    for (const cell of cells) cell.style.left = `${left}px`;
+    left += cells.length ? cells[0].getBoundingClientRect().width : 0;
+  }
+}
+
+// ---- refresh pipeline ------------------------------------------------------
+let filterAst = null;
+
+function refresh() {
+  let list = rows;
+  const term = el("search").value.trim().toLowerCase();
+  if (term) {
+    list = list.filter((r) =>
+      DATA.searchCols.some((c) => r.cells[c].toLowerCase().includes(term)));
+  }
+  if (filterAst) list = list.filter((r) => evalNode(filterAst, r));
+  if (sort.col != null) list = sortRows(list);
+  renderBody(list);
+  renderStats(list);
+  updateSortArrows();
+  measureFrozen();
+}
+
+// ---- what-if editing -------------------------------------------------------
+document.querySelector("#grid tbody").addEventListener("dblclick", (ev) => {
+  const td = ev.target.closest("td");
+  if (!td || td.dataset.c === undefined) return;
+  const r = +td.dataset.r, c = +td.dataset.c;
+  if (c === DATA.urlCol) return;
+  td.textContent = rows[r].cells[c]; // raw value, without display formatting
+  td.contentEditable = "plaintext-only";
+  if (td.contentEditable !== "plaintext-only") td.contentEditable = "true";
+  td.focus();
+  const range = document.createRange();
+  range.selectNodeContents(td);
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  let cancelled = false;
+  td.addEventListener("keydown", function onKey(kev) {
+    if (kev.key === "Enter") { kev.preventDefault(); td.blur(); }
+    else if (kev.key === "Escape") { cancelled = true; td.blur(); }
+  });
+  td.addEventListener("blur", () => {
+    td.contentEditable = "false";
+    if (!cancelled) rows[r].cells[c] = td.innerText.replace(/\n/g, " ");
+    refresh();
+  }, { once: true });
+});
+
+// ---- controls --------------------------------------------------------------
+function applyFilter() {
+  const src = el("filter").value;
+  const errBox = el("filterError");
+  try {
+    filterAst = src.trim() ? parse(src) : null;
+    errBox.style.display = "none";
+    refresh();
+  } catch (e) {
+    if (!e.filter) throw e;
+    errBox.textContent = `⚠ ${e.message}`;
+    errBox.style.display = "block";
+  }
+}
+el("apply").addEventListener("click", applyFilter);
+el("filter").addEventListener("keydown", (ev) => { if (ev.key === "Enter") applyFilter(); });
+el("clear").addEventListener("click", () => {
+  el("filter").value = "";
+  el("search").value = "";
+  applyFilter();
+});
+el("search").addEventListener("input", refresh);
+el("resetEdits").addEventListener("click", () => {
+  for (const row of rows) row.cells = row.original.slice();
+  refresh();
+});
+el("wrap").addEventListener("scroll", () => {
+  el("grid").classList.toggle("scrolled", el("wrap").scrollTop > 0);
+}, { passive: true });
+
+// ---- syntax help -----------------------------------------------------------
+function buildHelp() {
+  const quote = (n) => (/^[A-Za-z_][A-Za-z0-9_$]*$/.test(n) ? n : `"${n}"`);
+  const chips = cols.map((c) => `<code class="colChip">${esc(quote(c.name))}</code>`).join(" ");
+  el("help").innerHTML = `
+    <h3>Operators</h3>
+    <p><code>=</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code>
+       <code>LIKE</code> (<b>%</b> any, <b>_</b> one char) <code>IN (…)</code> <code>BETWEEN … AND …</code>
+       <code>IS [NOT] NULL</code> (blank cell) — combined with <code>AND</code> <code>OR</code> <code>NOT</code> and parentheses.
+       Compare columns to values or to each other. Numbers compare numerically; text is case-sensitive
+       (<code>LIKE</code> is case-insensitive). Quote names with symbols: <code>"REF__COST_($)" &gt; 100</code>.</p>
+    <h3>Examples (click to use)</h3>
+    <p>
+      <code class="exChip">MATCH_PERCENTAGE &gt;= 90</code>
+      <code class="exChip">REF_XUNITS != CAN_XUNITS AND MATCH_PERCENTAGE &gt; 85</code>
+      <code class="exChip">REF_XFILE_TYPE IN ('.ASM', '.PAR') OR CAN_XFOLDER_NAME LIKE 'Farm%'</code>
+      <code class="exChip">CAN_XID IS NULL</code>
+      <code class="exChip">MATCH_PERCENTAGE BETWEEN 85 AND 95 AND NOT REF_XIS_ASSEMBLY = 'true'</code>
+    </p>
+    <h3>Columns (click to insert)</h3>
+    <p>${chips}</p>`;
+  el("help").addEventListener("click", (ev) => {
+    const code = ev.target.closest("code");
+    if (!code) return;
+    const input = el("filter");
+    if (code.classList.contains("exChip")) input.value = code.textContent;
+    else if (code.classList.contains("colChip")) {
+      const at = input.selectionStart ?? input.value.length;
+      input.value = `${input.value.slice(0, at)}${code.textContent}${input.value.slice(at)}`;
+    } else return;
+    input.focus();
+  });
+}
+el("helpBtn").addEventListener("click", () => { el("help").hidden = !el("help").hidden; });
+
+// ---- init ------------------------------------------------------------------
+el("source").textContent = DATA.source;
+buildHeader();
+buildHelp();
+refresh();
+</script>
+</body>
+</html>
