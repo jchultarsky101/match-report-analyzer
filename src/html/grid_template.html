@@ -5,25 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Match Report — Data Grid</title>
 <style>
-  /* ---- drafting-instrument theme ---------------------------------------- */
+  /* ---- drafting-instrument theme, night shift ---------------------------- */
   :root {
-    --paper: #f4f1e9;          /* warm drafting paper */
-    --paper-raised: #fdfcf8;
-    --paper-zebra: #f7f4ec;
-    --paper-hover: #f0e9d8;
-    --ink: #1d2733;            /* blue-black ink */
-    --ink-soft: #66707e;
-    --hairline: #e0dccd;
-    --band: #16324f;           /* deep slate-blue nameplate */
-    --band-2: #24466b;
+    color-scheme: dark;
+    --paper: #0e141d;          /* night drafting table */
+    --paper-raised: #151d28;
+    --paper-zebra: #19222f;
+    --paper-hover: #243046;
+    --well: #0b1119;           /* recessed input wells */
+    --ink: #d7dee8;            /* chalk-blue ink */
+    --ink-soft: #8d99a9;
+    --hairline: #263140;
+    --band: #1b3a5c;           /* slate-blue nameplate */
+    --band-2: #29517c;
     --band-ink: #e9eef5;
     --band-ink-dim: #9fb2c8;
-    --copper: #b4690e;         /* instrument brass */
-    --copper-deep: #8f5106;
-    --copper-wash: #f7ead2;
-    --match-bg: #d8eedb; --match-ink: #17603a;
-    --diff-bg:  #fadfe3; --diff-ink:  #9c2438;
-    --miss-bg:  #fcefcb; --miss-ink:  #7a5a00;
+    --steel: #56708c;          /* pair-box edges, instrument lines */
+    --copper: #d98a24;         /* lamplit brass */
+    --copper-deep: #b4690e;
+    --copper-lit: #f0b869;
+    --copper-wash: rgba(217, 138, 36, 0.18);
+    --link: #7aa9d8;
+    --match-bg: #14301e; --match-ink: #63d893;
+    --diff-bg:  #3a1620; --diff-ink:  #ff8ba0;
+    --miss-bg:  #33280e; --miss-ink:  #e9b953;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Cascadia Code", monospace;
     --sans: "Avenir Next", Avenir, Seravek, "Gill Sans", Corbel, "Segoe UI", sans-serif;
   }
@@ -35,8 +40,8 @@
     flex-direction: column;
     color: var(--ink);
     background:
-      repeating-linear-gradient(0deg, rgba(22, 50, 79, 0.025) 0 1px, transparent 1px 28px),
-      repeating-linear-gradient(90deg, rgba(22, 50, 79, 0.025) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(0deg, rgba(122, 162, 255, 0.03) 0 1px, transparent 1px 28px),
+      repeating-linear-gradient(90deg, rgba(122, 162, 255, 0.03) 0 1px, transparent 1px 28px),
       var(--paper);
     font: 13px/1.45 var(--sans);
   }
@@ -50,20 +55,21 @@
   #bar {
     flex: none;
     padding: 14px 18px 0;
-    background: var(--paper-raised);
+    background: linear-gradient(var(--paper-raised), #121926);
     border-bottom: 1px solid var(--hairline);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 6px 18px -14px rgba(29, 39, 51, 0.5);
+    box-shadow: 0 1px 0 rgba(233, 238, 245, 0.05) inset, 0 8px 22px -14px rgba(0, 0, 0, 0.8);
   }
   #titleRow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   #brand { display: flex; align-items: center; gap: 12px; }
   #mark {
     width: 30px; height: 30px;
-    border: 1.5px solid var(--band);
+    border: 1.5px solid var(--steel);
     border-radius: 50%;
     background:
-      linear-gradient(var(--band) 0 0) center / 1.5px 30px no-repeat,
-      linear-gradient(var(--band) 0 0) center / 30px 1.5px no-repeat,
+      linear-gradient(var(--steel) 0 0) center / 1.5px 30px no-repeat,
+      linear-gradient(var(--steel) 0 0) center / 30px 1.5px no-repeat,
       radial-gradient(circle at center, var(--copper) 0 3.5px, transparent 4px);
+    box-shadow: 0 0 12px rgba(217, 138, 36, 0.25);
   }
   h1 {
     margin: 0;
@@ -92,7 +98,7 @@
   .stat b { font-size: 13px; color: var(--ink); font-weight: 600; }
   .stat i { font-style: normal; }
   .stat::before { content: ""; width: 7px; height: 7px; border-radius: 2px; align-self: center; }
-  .stat.s-r::before { background: var(--band); }
+  .stat.s-r::before { background: var(--link); }
   .stat.s-m::before { background: var(--match-ink); }
   .stat.s-d::before { background: var(--diff-ink); }
   .stat.s-x::before { background: var(--miss-ink); }
@@ -102,14 +108,14 @@
   input {
     font: 12px/1.3 var(--mono);
     color: var(--ink);
-    background: var(--paper);
+    background: var(--well);
     border: 1px solid var(--hairline);
     border-radius: 8px;
     padding: 8px 10px;
-    box-shadow: inset 0 1px 2px rgba(29, 39, 51, 0.06);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
   }
-  input::placeholder { color: #a4a89e; }
-  input:focus { outline: none; border-color: var(--copper); box-shadow: inset 0 1px 2px rgba(29,39,51,0.06), 0 0 0 3px var(--copper-wash); }
+  input::placeholder { color: #5a6675; }
+  input:focus { outline: none; border-color: var(--copper); box-shadow: inset 0 1px 3px rgba(0,0,0,0.45), 0 0 0 3px var(--copper-wash); }
   #search { width: 250px; }
   #filterWrap { flex: 1; min-width: 300px; display: flex; }
   #filterWrap .kw {
@@ -129,18 +135,18 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--ink);
-    background: var(--paper-raised);
-    border: 1px solid var(--hairline);
+    background: #1d2735;
+    border: 1px solid #2c3849;
     border-radius: 8px;
     padding: 0 14px;
     cursor: pointer;
     transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
   }
-  button:hover { background: #fff; box-shadow: 0 2px 8px -3px rgba(29, 39, 51, 0.35); transform: translateY(-1px); }
+  button:hover { background: #263246; box-shadow: 0 2px 10px -3px rgba(0, 0, 0, 0.7); transform: translateY(-1px); }
   button:active { transform: none; box-shadow: none; }
-  #apply { background: var(--copper); border-color: var(--copper-deep); color: #fff8ec; }
-  #apply:hover { background: var(--copper-deep); }
-  #resetEdits { color: var(--copper-deep); border-color: var(--copper); background: var(--copper-wash); }
+  #apply { background: var(--copper); border-color: var(--copper-deep); color: #221302; }
+  #apply:hover { background: var(--copper-lit); }
+  #resetEdits { color: var(--copper-lit); border-color: var(--copper); background: var(--copper-wash); }
 
   #filterError {
     display: none;
@@ -166,13 +172,13 @@
     font: 600 10px var(--mono);
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--copper-deep);
+    color: var(--copper);
   }
   #help h3:first-child { margin-top: 0; }
   #help p { margin: 4px 0; color: var(--ink); line-height: 1.9; }
   #help code {
-    background: var(--paper-raised);
-    border: 1px solid var(--hairline);
+    background: #1d2735;
+    border: 1px solid #2c3849;
     border-bottom-width: 2px;
     border-radius: 5px;
     padding: 2px 7px;
@@ -180,7 +186,7 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  #help code:hover { border-color: var(--copper); color: var(--copper-deep); }
+  #help code:hover { border-color: var(--copper); color: var(--copper-lit); }
 
   #legend {
     display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
@@ -194,7 +200,7 @@
   .chip {
     display: inline-block; width: 12px; height: 12px;
     border-radius: 3px; margin-right: 5px; vertical-align: -2px;
-    border: 1px solid rgba(29, 39, 51, 0.18);
+    border: 1px solid rgba(233, 238, 245, 0.18);
   }
   #legend .hint { margin-left: auto; font: 11px var(--mono); color: var(--ink-soft); }
 
@@ -202,7 +208,7 @@
   #wrap { flex: 1; overflow: auto; }
   #wrap::-webkit-scrollbar { width: 11px; height: 11px; }
   #wrap::-webkit-scrollbar-track { background: var(--paper); }
-  #wrap::-webkit-scrollbar-thumb { background: #cdc6b2; border-radius: 6px; border: 2px solid var(--paper); }
+  #wrap::-webkit-scrollbar-thumb { background: #334052; border-radius: 6px; border: 2px solid var(--paper); }
   #wrap::-webkit-scrollbar-thumb:hover { background: var(--copper); }
   table { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: 100%; }
   th, td {
@@ -217,50 +223,58 @@
   td { background: var(--paper-raised); }
   thead th {
     position: sticky; z-index: 3;
-    background: linear-gradient(var(--band), #122a43);
+    background: linear-gradient(var(--band), #142c47);
     color: var(--band-ink);
     font: 600 10.5px/1.3 var(--mono);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     text-align: center;
     height: 30px;
-    border-right-color: rgba(233, 238, 245, 0.14);
-    border-bottom-color: rgba(233, 238, 245, 0.18);
+    border-right-color: rgba(233, 238, 245, 0.12);
+    border-bottom-color: rgba(233, 238, 245, 0.16);
   }
   thead tr:first-child th { top: 0; }
   thead th[rowspan="2"] { height: 60px; }
   thead tr:last-child th {
     top: 30px;
-    background: linear-gradient(var(--band-2), #1d3c5e);
+    background: linear-gradient(var(--band-2), #1f3f63);
     color: var(--band-ink-dim);
   }
   th.sortable { cursor: pointer; user-select: none; }
   th.sortable:hover { color: #ffffff; }
-  th .dir { color: #ffb35c; margin-left: 4px; }
+  th .dir { color: var(--copper-lit); margin-left: 4px; }
   #grid.scrolled thead tr:last-child th, #grid.scrolled thead th[rowspan="2"] {
-    box-shadow: 0 6px 12px -6px rgba(18, 42, 67, 0.55);
+    box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.75);
   }
   tbody tr:nth-child(even) td { background: var(--paper-zebra); }
   tbody tr:hover td { background: var(--paper-hover); }
   td.fz, th.fz { position: sticky; z-index: 2; max-width: 240px; }
   thead th.fz { z-index: 4; }
-  td.path { font: 11px var(--mono); color: #33435a; }
+  td.path { font: 11px var(--mono); color: #e4ecf6; }
+  td.path .pwrap { display: flex; min-width: 0; }
+  td.path .dim {
+    color: #8b9aae;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  td.path .base { flex: none; }
   td:not(.fz) { position: relative; }
   td.s-match { background: var(--match-bg) !important; color: var(--match-ink); }
   td.s-different { background: var(--diff-bg) !important; color: var(--diff-ink); font-weight: 500; }
   td.s-missing { background: var(--miss-bg) !important; color: var(--miss-ink); }
-  .pl { border-left: 2px solid #9db0c3; }
-  .pr { border-right: 2px solid #9db0c3; }
-  thead tr:first-child th.band { border-top: 2px solid #9db0c3; }
-  tbody tr:last-child td.pl, tbody tr:last-child td.pr { border-bottom: 2px solid #9db0c3; }
+  .pl { border-left: 2px solid var(--steel); }
+  .pr { border-right: 2px solid var(--steel); }
+  thead tr:first-child th.band { border-top: 2px solid var(--steel); }
+  tbody tr:last-child td.pl, tbody tr:last-child td.pr { border-bottom: 2px solid var(--steel); }
   td.num { text-align: right; font: 600 11.5px var(--mono); font-variant-numeric: tabular-nums; }
   .pct {
     display: inline-block;
     min-width: 64px;
     padding: 2px 8px;
     border-radius: 999px;
-    color: #1d2733;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+    color: #14202e;
   }
   td.edited { box-shadow: inset 0 0 0 1.5px var(--copper); }
   td.edited::after {
@@ -270,12 +284,12 @@
     border-left-color: transparent;
     border-bottom-color: transparent;
   }
-  td a { color: var(--band-2); font: 11px var(--mono); text-decoration-color: #9db0c3; }
-  td a:hover { color: var(--copper-deep); text-decoration-color: var(--copper); }
+  td a { color: var(--link); font: 11px var(--mono); text-decoration-color: var(--steel); }
+  td a:hover { color: var(--copper-lit); text-decoration-color: var(--copper); }
   td[contenteditable="true"], td[contenteditable="plaintext-only"] {
     outline: 2px solid var(--copper);
     outline-offset: -2px;
-    background: #fff !important;
+    background: var(--well) !important;
     white-space: normal;
     max-width: none;
   }
@@ -685,7 +699,18 @@ function cellHtml(row, ci, states) {
       return `<td data-r="${row.idx}" data-c="${ci}"><a href="${esc(link)}" target="_blank" rel="noopener" title="${esc(link)}">open comparison ↗</a></td>`;
     }
   }
-  return `<td class="${classes.join(" ")}" data-r="${row.idx}" data-c="${ci}" title="${esc(title)}">${esc(raw)}</td>`;
+  let content = esc(raw);
+  // Path cells: mute the directory prefix so the filename stands out, and let
+  // the prefix absorb any truncation so the filename is always visible.
+  if (classes.includes("path")) {
+    const cut = raw.lastIndexOf("/") + 1;
+    if (cut > 0) {
+      content =
+        `<span class="pwrap"><span class="dim">${esc(raw.slice(0, cut))}</span>` +
+        `<span class="base">${esc(raw.slice(cut))}</span></span>`;
+    }
+  }
+  return `<td class="${classes.join(" ")}" data-r="${row.idx}" data-c="${ci}" title="${esc(title)}">${content}</td>`;
 }
 
 function renderBody(list) {
