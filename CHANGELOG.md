@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Graph: clicking an edge now opens that match's details — both assets
+  (clickable), geometry and metadata scores, the comparison deep link, and the
+  full field-by-field table. Edges highlight under the cursor with a tooltip,
+  and the selected edge (plus its endpoints) is lit in copper.
+- Graph: the details panel is horizontally resizable by dragging its left
+  edge, so long metadata values stay readable.
+
 ### Changed
 - The graph's confusing "Score blend" and "Minimum combined score" sliders are
   replaced by two independent filters: minimum *geometric* match and minimum

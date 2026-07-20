@@ -155,9 +155,23 @@
     right: 12px;
     bottom: 12px;
     width: 380px;
+    min-width: 300px;
     overflow-y: auto;
     padding-top: 8px;
   }
+  #dragbar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    cursor: col-resize;
+    touch-action: none;
+    border-left: 2px solid transparent;
+    border-radius: 10px 0 0 10px;
+  }
+  #dragbar:hover, #dragbar.active { border-left-color: var(--copper); }
+  #details h2 .vs { color: var(--copper); font-weight: 400; }
   #details::-webkit-scrollbar { width: 10px; }
   #details::-webkit-scrollbar-track { background: transparent; }
   #details::-webkit-scrollbar-thumb { background: #334052; border-radius: 6px; border: 2px solid var(--paper-raised); }
@@ -191,8 +205,8 @@
     background: rgba(11, 17, 25, 0.55);
   }
   .matchCard.below { opacity: 0.45; }
-  .matchCard .mname { color: var(--link); cursor: pointer; font-weight: 600; word-break: break-all; }
-  .matchCard .mname:hover { color: var(--copper-lit); text-decoration: underline; }
+  #details .mname { color: var(--link); cursor: pointer; font-weight: 600; word-break: break-all; }
+  #details .mname:hover { color: var(--copper-lit); text-decoration: underline; }
   .matchCard .scores { color: var(--ink-soft); margin: 3px 0; font: 11px var(--mono); }
   .matchCard .scores b { color: var(--ink); }
   .matchCard a.cmp { color: var(--link); font: 11px var(--mono); text-decoration-color: var(--steel); }
@@ -279,7 +293,7 @@
     <div><span class="sw"></span>geometry + metadata scored</div>
     <div><span class="sw dashed"></span>geometry only — no shared metadata; hidden once a metadata minimum is set</div>
     <div>node size = number of matches &middot; color = cluster</div>
-    <div>drag nodes &middot; scroll to zoom &middot; click for details</div>
+    <div>drag nodes &middot; scroll to zoom &middot; click a node or an edge for details</div>
   </div>
 </div>
 
@@ -323,6 +337,8 @@ for (const e of edges) { nodes[e.source].degree++; nodes[e.target].degree++; }
 let geoMin = 0;       // minimum geometric match for an edge to be shown
 let metaMin = 0;      // minimum metadata match for an edge to be shown
 let selected = null, hovered = null, searchHits = null;
+let selectedEdge = null, hoveredEdge = null;
+let detailsWidth = 380; // user-resizable width of the details panel
 
 // Fixed blend shaping an edge's visual strength (thickness, brightness, and
 // how close the spring pulls its nodes). Purely presentational — filtering is
@@ -400,7 +416,12 @@ function fit() {
     x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y);
   }
   const pad = 70;
-  view.k = Math.min(2, (W - 2 * pad) / Math.max(x1 - x0, 1), (H - 2 * pad) / Math.max(y1 - y0, 1));
+  // Clamp to a positive floor: a tiny window would otherwise yield a zero or
+  // negative zoom, flipping the render and breaking hit-testing.
+  view.k = Math.max(
+    0.05,
+    Math.min(2, (W - 2 * pad) / Math.max(x1 - x0, 1), (H - 2 * pad) / Math.max(y1 - y0, 1)),
+  );
   view.x = W / 2 - ((x0 + x1) / 2) * view.k;
   view.y = H / 2 - ((y0 + y1) / 2) * view.k;
 }
@@ -470,13 +491,16 @@ function draw() {
   for (const e of visible) {
     const a = nodes[e.source], b = nodes[e.target];
     const s = combined(e);
-    const active = touches(e, selected) || touches(e, hovered);
+    const isSel = e === selectedEdge;
+    const active =
+      isSel || e === hoveredEdge || touches(e, selected) || touches(e, hovered);
     let alphaE = 0.14 + 0.6 * (s / 100);
     if (searchHits && !(inSearch(a) && inSearch(b))) alphaE = 0.04;
-    if (selected && !active) alphaE *= 0.35;
+    if ((selected || selectedEdge) && !active) alphaE *= 0.35;
     ctx.globalAlpha = active ? Math.min(1, alphaE + 0.35) : alphaE;
-    ctx.strokeStyle = active ? "#e4ecf6" : "#54749c";
-    ctx.lineWidth = ((0.6 + 2.4 * (s / 100)) / view.k) * (active ? 1.6 : 1);
+    ctx.strokeStyle = isSel ? "#f0b869" : active ? "#e4ecf6" : "#54749c";
+    ctx.lineWidth =
+      ((0.6 + 2.4 * (s / 100)) / view.k) * (isSel ? 2 : active ? 1.6 : 1);
     ctx.setLineDash(e.metadata == null ? [5 / view.k, 5 / view.k] : []);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
@@ -488,7 +512,9 @@ function draw() {
   ctx.textBaseline = "middle";
   for (const n of nodes) {
     const r = radius(n);
-    const lit = n === selected || n === hovered || (searchHits && searchHits.has(n.i));
+    const lit =
+      n === selected || n === hovered || (searchHits && searchHits.has(n.i)) ||
+      (selectedEdge && (selectedEdge.source === n.i || selectedEdge.target === n.i));
     ctx.globalAlpha = dimNode(n) ? 0.15 : 1;
     ctx.fillStyle = colorOf(clusterOf[n.i]);
     if (lit) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 18; }
@@ -536,6 +562,21 @@ function hit(wx, wy) {
   return null;
 }
 
+// The visible edge nearest to a world point, within a small pick distance.
+function edgeAt(wx, wy) {
+  let best = null, bestD = 6 / view.k;
+  for (const e of visible) {
+    const a = nodes[e.source], b = nodes[e.target];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? ((wx - a.x) * dx + (wy - a.y) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(wx - (a.x + t * dx), wy - (a.y + t * dy));
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  return best;
+}
+
 canvas.addEventListener("pointerdown", (ev) => {
   const [wx, wy] = toWorld(ev.clientX, ev.clientY);
   const n = hit(wx, wy);
@@ -563,7 +604,15 @@ canvas.addEventListener("pointermove", (ev) => {
     userAdjustedView = true;
   } else {
     const [wx, wy] = toWorld(ev.clientX, ev.clientY);
-    setHover(hit(wx, wy), ev.clientX, ev.clientY);
+    const n = hit(wx, wy);
+    if (n) {
+      hoveredEdge = null;
+      setHover(n, ev.clientX, ev.clientY);
+    } else {
+      hovered = null;
+      setEdgeHover(edgeAt(wx, wy), ev.clientX, ev.clientY);
+    }
+    canvas.style.cursor = hovered || hoveredEdge ? "pointer" : "";
   }
   mouse.lastX = ev.clientX;
   mouse.lastY = ev.clientY;
@@ -575,7 +624,12 @@ canvas.addEventListener("pointerup", () => {
     mouse.dragNode.fixed = false;
     if (!mouse.moved) select(mouse.dragNode);
   } else if (mouse.panning && !mouse.moved) {
-    select(null);
+    // A clean click on the background: an edge under the cursor opens the
+    // relationship's details; empty space deselects.
+    const [wx, wy] = toWorld(mouse.lastX, mouse.lastY);
+    const edge = edgeAt(wx, wy);
+    if (edge) selectEdge(edge);
+    else select(null);
   }
   mouse.dragNode = null;
   mouse.panning = false;
@@ -609,10 +663,24 @@ function setHover(n, cx, cy) {
   tip.style.top = Math.min(cy + 14, H - 160) + "px";
 }
 
+function setEdgeHover(e, cx, cy) {
+  hoveredEdge = e;
+  const tip = el("tooltip");
+  if (!e) { tip.hidden = true; return; }
+  const a = nodes[e.source], b = nodes[e.target];
+  tip.innerHTML =
+    `<div class="t-label">${esc(a.label)} ↔ ${esc(b.label)}</div>` +
+    `<div class="kv">geometry ${fmtPct(e.geometry)} · metadata ` +
+    `${e.metadata == null ? "—" : fmtPct(e.metadata)} · click for details</div>`;
+  tip.hidden = false;
+  tip.style.left = Math.min(cx + 14, W - 340) + "px";
+  tip.style.top = Math.min(cy + 14, H - 160) + "px";
+}
+
 // ---- details panel ---------------------------------------------------------
 const fmtPct = (x) => (x == null ? "—" : `${(+x).toFixed(1)}%`);
 
-function fieldTable(e) {
+function fieldTable(e, open = false) {
   const src = nodes[e.source], tgt = nodes[e.target];
   let rows = "";
   for (const f of e.fields) {
@@ -624,22 +692,40 @@ function fieldTable(e) {
     </tr>`;
   }
   if (!rows) return "";
-  return `<details class="fields"><summary>${e.fields.length} metadata fields</summary>
+  return `<details class="fields"${open ? " open" : ""}>
+    <summary>${e.fields.length} metadata fields</summary>
     <table class="diff">
       <tr><th>field</th><th>${esc(src.label)}</th><th>${esc(tgt.label)}</th></tr>
       ${rows}
     </table></details>`;
 }
 
+// Shared chrome for both details views: the resize handle and close button.
+const PANEL_CHROME =
+  `<div id="dragbar" title="drag to resize"></div>` +
+  `<button class="close" id="closeDetails">×</button>`;
+
+function openPanel(html) {
+  const panel = el("details");
+  panel.style.width = `${detailsWidth}px`;
+  panel.innerHTML = PANEL_CHROME + html;
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  el("closeDetails").onclick = () => select(null);
+  for (const link of panel.querySelectorAll(".mname")) {
+    link.onclick = () => select(nodes[+link.dataset.node]);
+  }
+}
+
 function select(n) {
   selected = n;
+  selectedEdge = null;
   const panel = el("details");
   if (!n) { panel.hidden = true; return; }
   const inc = edges
     .filter((e) => e.source === n.i || e.target === n.i)
     .sort((a, b) => (b.geometry ?? 0) - (a.geometry ?? 0));
-  let h = `<button class="close" id="closeDetails">×</button>
-    <h2>${esc(n.label)}</h2>
+  let h = `<h2>${esc(n.label)}</h2>
     <div class="kv">${esc(n.path)}</div>`;
   if (n.uuid) h += `<div class="kv mono">${esc(n.uuid)}</div>`;
   if (n.meta.length) {
@@ -660,13 +746,50 @@ function select(n) {
       ${fieldTable(e)}
     </div>`;
   }
-  panel.innerHTML = h;
-  panel.hidden = false;
-  el("closeDetails").onclick = () => select(null);
-  for (const link of panel.querySelectorAll(".mname")) {
-    link.onclick = () => select(nodes[+link.dataset.node]);
-  }
+  openPanel(h);
 }
+
+// Shows the details of a single match (an edge): both assets, the two
+// scores, the comparison link, and the full field-by-field table.
+function selectEdge(e) {
+  selectedEdge = e;
+  selected = null;
+  const a = nodes[e.source], b = nodes[e.target];
+  const hidden = !passes(e);
+  const h = `<h2><span class="mname" data-node="${a.i}">${esc(a.label)}</span>
+      <span class="vs">↔</span>
+      <span class="mname" data-node="${b.i}">${esc(b.label)}</span></h2>
+    <div class="kv">reference: ${esc(a.path)}</div>
+    <div class="kv">candidate: ${esc(b.path)}</div>
+    <div class="matchCard${hidden ? " below" : ""}">
+      <div class="scores">geometry <b>${fmtPct(e.geometry)}</b> ·
+        metadata <b>${e.metadata == null ? "—" : `${fmtPct(e.metadata)} (${e.matched}/${e.comparable})`}</b>
+        ${hidden ? " · hidden by filters" : ""}</div>
+      ${e.url ? `<a class="cmp" href="${esc(e.url)}" target="_blank" rel="noopener">Open comparison ↗</a>` : ""}
+    </div>
+    <h3>Metadata comparison</h3>
+    ${fieldTable(e, true) || `<div class="kv">no metadata on either side of this match</div>`}`;
+  openPanel(h);
+}
+
+// Dragging the panel's left edge resizes it (long metadata values need room).
+el("details").addEventListener("pointerdown", (ev) => {
+  if (ev.target.id !== "dragbar") return;
+  ev.preventDefault();
+  const bar = ev.target;
+  bar.classList.add("active");
+  const move = (m) => {
+    detailsWidth = Math.max(300, Math.min(window.innerWidth - 80, window.innerWidth - 12 - m.clientX));
+    el("details").style.width = `${detailsWidth}px`;
+  };
+  const up = () => {
+    bar.classList.remove("active");
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", up);
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", up);
+});
 
 // ---- controls --------------------------------------------------------------
 function updateFilterLabels() {
@@ -678,6 +801,7 @@ function onFilterChange() {
   refilter();
   reheat(0.5);
   if (selected) select(selected);
+  else if (selectedEdge) selectEdge(selectedEdge);
 }
 el("geoMin").addEventListener("input", (ev) => {
   geoMin = +ev.target.value;

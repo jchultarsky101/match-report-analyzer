@@ -163,7 +163,10 @@ mutually similar assets pull together:
   nodes are colored by cluster and sized by match count.
 - **Details on click** — selecting an asset lists all its matches with both
   scores, a field-by-field comparison table (colored like the Excel view), and
-  the clickable `COMPARISON_URL` deep link.
+  the clickable `COMPARISON_URL` deep link. Clicking an *edge* opens that
+  single match's details — both assets, both scores, and the full field
+  comparison. The details panel is horizontally resizable (drag its left
+  edge) so long metadata values stay readable.
 
 ## Usage
 
