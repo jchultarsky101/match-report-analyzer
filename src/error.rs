@@ -25,6 +25,16 @@ pub enum AppError {
         source: std::io::Error,
     },
 
+    /// The output file could not be written.
+    #[error("failed to write output file {path}: {source}")]
+    WriteOutput {
+        /// The path that could not be written.
+        path: PathBuf,
+        /// The underlying I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+
     /// The CSV is missing one or more columns required to build a match report.
     #[error("the CSV is missing required column(s): {}", .columns.join(", "))]
     MissingRequiredColumns {

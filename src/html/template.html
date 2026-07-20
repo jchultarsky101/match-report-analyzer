@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Match Report — Similarity Constellation</title>
+<style>
+  :root {
+    --bg0: #070b18;
+    --bg1: #101a36;
+    --panel: rgba(13, 20, 40, 0.9);
+    --line: rgba(122, 162, 255, 0.28);
+    --text: #dbe4ff;
+    --muted: #8a97b8;
+    --accent: #7aa2ff;
+    --match: #34d399;
+    --diff: #f87171;
+    --miss: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    color: var(--text);
+    background: radial-gradient(1200px 800px at 70% 15%, var(--bg1), var(--bg0));
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  canvas { position: fixed; inset: 0; display: block; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  }
+  #hud { top: 12px; left: 12px; max-width: 360px; }
+  #hud h1 { margin: 0 0 2px; font-size: 15px; letter-spacing: 0.02em; }
+  #hud .src { color: var(--muted); word-break: break-all; }
+  #stats { margin-top: 6px; color: var(--accent); }
+  #controls { bottom: 12px; left: 12px; width: 300px; }
+  #controls label { display: block; margin: 10px 0 2px; color: var(--muted); }
+  #controls label:first-child { margin-top: 0; }
+  #controls b { color: var(--text); font-weight: 600; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+  input[type="search"] {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: rgba(8, 12, 26, 0.8);
+    color: var(--text);
+    outline: none;
+  }
+  input[type="search"]:focus { border-color: var(--accent); }
+  button {
+    margin-top: 10px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: rgba(122, 162, 255, 0.12);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { background: rgba(122, 162, 255, 0.25); }
+  #legend { margin-top: 10px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+  #legend div { margin: 3px 0; }
+  .sw {
+    display: inline-block;
+    width: 26px;
+    height: 0;
+    border-top: 2px solid var(--accent);
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  .sw.dashed { border-top-style: dashed; }
+  #details {
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: 380px;
+    overflow-y: auto;
+    padding-top: 8px;
+  }
+  #details h2 { margin: 4px 24px 2px 0; font-size: 15px; word-break: break-all; }
+  #details h3 { margin: 14px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  #details .kv { color: var(--muted); word-break: break-all; margin: 1px 0; }
+  #details .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  #details .close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    margin: 0;
+    padding: 2px 9px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .metaList { margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); }
+  .metaList b { color: var(--text); font-weight: 500; }
+  .matchCard {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 8px 0;
+    background: rgba(8, 12, 26, 0.5);
+  }
+  .matchCard.below { opacity: 0.45; }
+  .matchCard .mname { color: var(--accent); cursor: pointer; font-weight: 600; word-break: break-all; }
+  .matchCard .mname:hover { text-decoration: underline; }
+  .matchCard .scores { color: var(--muted); margin: 3px 0; }
+  .matchCard .scores b { color: var(--text); }
+  .matchCard a.cmp { color: var(--accent); }
+  details.fields { margin-top: 4px; }
+  details.fields summary { cursor: pointer; color: var(--muted); }
+  table.diff { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11px; }
+  table.diff th, table.diff td {
+    text-align: left;
+    padding: 3px 6px;
+    border-bottom: 1px solid rgba(122, 162, 255, 0.12);
+    word-break: break-all;
+    vertical-align: top;
+  }
+  table.diff th { color: var(--muted); font-weight: 500; }
+  td.state-match { color: var(--match); }
+  td.state-different { color: var(--diff); }
+  td.state-missing { color: var(--miss); }
+  .tag {
+    display: inline-block;
+    font-size: 9px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+    margin-left: 4px;
+    vertical-align: 1px;
+  }
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    max-width: 320px;
+    z-index: 10;
+  }
+  #tooltip .t-label { font-weight: 600; }
+  #tooltip .kv { color: var(--muted); word-break: break-all; }
+  #empty {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<div class="panel" id="hud">
+  <h1>Similarity constellation</h1>
+  <div class="src" id="source"></div>
+  <div id="stats"></div>
+</div>
+
+<div class="panel" id="controls">
+  <label>Score blend: <b id="blendLabel"></b></label>
+  <input type="range" id="blend" min="0" max="100" value="70" />
+  <label>Minimum combined score: <b id="thresholdLabel"></b></label>
+  <input type="range" id="threshold" min="0" max="100" value="0" />
+  <label for="search">Find asset</label>
+  <input type="search" id="search" placeholder="name, path, or UUID…" />
+  <button id="fit">Fit view</button>
+  <div id="legend">
+    <div><span class="sw"></span>geometry + metadata scored</div>
+    <div><span class="sw dashed"></span>geometry only (no shared metadata)</div>
+    <div>node size = number of matches &middot; color = cluster</div>
+    <div>drag nodes &middot; scroll to zoom &middot; click for details</div>
+  </div>
+</div>
+
+<aside class="panel" id="details" hidden></aside>
+<div id="tooltip" hidden></div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+if (!DATA) {
+  // This is the raw template: no report has been embedded.
+  const note = document.createElement("div");
+  note.className = "panel";
+  note.id = "empty";
+  note.innerHTML =
+    "No report data is embedded in this page. Generate it with " +
+    "<b>match-report-analyzer graph &lt;INPUT_CSV&gt; &lt;OUTPUT_HTML&gt;</b> " +
+    "and open the generated file.";
+  document.body.appendChild(note);
+  throw new Error("no embedded report data");
+}
+
+const canvas = document.getElementById("sky");
+const ctx = canvas.getContext("2d");
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ---- model -----------------------------------------------------------------
+// Initial positions follow a phyllotaxis spiral: deterministic and evenly
+// spread, so the simulation starts from a stable, untangled state.
+const nodes = DATA.nodes.map((n, i) => ({
+  ...n, i,
+  x: Math.cos(i * 2.399963) * 16 * Math.sqrt(i + 1),
+  y: Math.sin(i * 2.399963) * 16 * Math.sqrt(i + 1),
+  vx: 0, vy: 0, fixed: false, degree: 0,
+}));
+const edges = DATA.edges.map((e) => ({ ...e }));
+for (const e of edges) { nodes[e.source].degree++; nodes[e.target].degree++; }
+
+let blend = 0.7;      // weight of geometry in the combined score
+let threshold = 0;    // minimum combined score for an edge to be shown
+let selected = null, hovered = null, searchHits = null;
+
+// Combined score: blend of geometry and metadata agreement. When an edge has
+// no shared metadata to compare, geometry stands in for the metadata term.
+function combined(e) {
+  const g = e.geometry ?? 0;
+  const m = e.metadata ?? g;
+  return blend * g + (1 - blend) * m;
+}
+
+let visible = [], visDegree = [], clusterOf = [], clusterCount = 0;
+function refilter() {
+  visible = edges.filter((e) => combined(e) >= threshold);
+  visDegree = nodes.map(() => 0);
+  const parent = nodes.map((_, i) => i);
+  const find = (i) => {
+    while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+    return i;
+  };
+  for (const e of visible) {
+    visDegree[e.source]++; visDegree[e.target]++;
+    const a = find(e.source), b = find(e.target);
+    if (a !== b) parent[a] = b;
+  }
+  // Number the clusters in order of their smallest member so colors are stable.
+  const roots = new Map();
+  clusterCount = 0;
+  clusterOf = nodes.map((_, i) => {
+    if (!visDegree[i]) return -1;
+    const r = find(i);
+    if (!roots.has(r)) roots.set(r, clusterCount++);
+    return roots.get(r);
+  });
+  el("stats").textContent =
+    `${nodes.length} assets · ${visible.length} of ${edges.length} matches · ${clusterCount} clusters`;
+}
+const colorOf = (k) => (k < 0 ? "#3a4666" : `hsl(${(k * 137.508) % 360} 70% 65%)`);
+
+// ---- view (pan / zoom) -----------------------------------------------------
+let W = 0, H = 0, dpr = 1;
+const view = { x: 0, y: 0, k: 1 };
+let userAdjustedView = false, settledFit = false;
+const toWorld = (x, y) => [(x - view.x) / view.k, (y - view.y) / view.k];
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+}
+window.addEventListener("resize", resize);
+resize();
+
+function fit() {
+  if (!nodes.length) return;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const n of nodes) {
+    x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+    x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y);
+  }
+  const pad = 70;
+  view.k = Math.min(2, (W - 2 * pad) / Math.max(x1 - x0, 1), (H - 2 * pad) / Math.max(y1 - y0, 1));
+  view.x = W / 2 - ((x0 + x1) / 2) * view.k;
+  view.y = H / 2 - ((y0 + y1) / 2) * view.k;
+}
+
+// ---- simulation ------------------------------------------------------------
+let alpha = 1;
+const reheat = (a) => { alpha = Math.max(alpha, a); };
+
+function step() {
+  // Pairwise repulsion spreads the constellation out.
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[i];
+    for (let j = i + 1; j < nodes.length; j++) {
+      const b = nodes[j];
+      let dx = a.x - b.x, dy = a.y - b.y;
+      let d2 = dx * dx + dy * dy;
+      if (d2 < 1) { d2 = 1; dx = i % 2 ? 0.7 : -0.7; dy = 0.7; }
+      const d = Math.sqrt(d2);
+      const f = Math.min(1400 / d2, 8) * alpha;
+      dx /= d; dy /= d;
+      a.vx += dx * f; a.vy += dy * f;
+      b.vx -= dx * f; b.vy -= dy * f;
+    }
+  }
+  // Springs pull matched assets together; stronger matches sit closer.
+  for (const e of visible) {
+    const a = nodes[e.source], b = nodes[e.target];
+    const s = combined(e);
+    const rest = 30 + (100 - s) * 2.2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.max(Math.hypot(dx, dy), 0.01);
+    const f = ((0.015 + 0.05 * (s / 100)) * alpha * (d - rest)) / d;
+    a.vx += dx * f; a.vy += dy * f;
+    b.vx -= dx * f; b.vy -= dy * f;
+  }
+  for (const n of nodes) {
+    if (n.fixed) { n.vx = 0; n.vy = 0; continue; }
+    n.vx = (n.vx - n.x * 0.0015 * alpha) * 0.8;
+    n.vy = (n.vy - n.y * 0.0015 * alpha) * 0.8;
+    n.x += n.vx; n.y += n.vy;
+  }
+  alpha *= 0.985;
+}
+
+// ---- rendering -------------------------------------------------------------
+const stars = Array.from({ length: 220 }, () => ({
+  x: Math.random(), y: Math.random(),
+  r: Math.random() * 1.6 + 0.4, a: Math.random() * 0.25 + 0.05,
+}));
+
+const radius = (n) => 3.5 + 2.1 * Math.sqrt(n.degree);
+const inSearch = (n) => !searchHits || searchHits.has(n.i);
+const dimNode = (n) => !inSearch(n) || (visDegree[n.i] === 0 && threshold > 0);
+const touches = (e, n) => n && (e.source === n.i || e.target === n.i);
+
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#9fb4e8";
+  for (const s of stars) {
+    ctx.globalAlpha = s.a;
+    ctx.fillRect(s.x * W, s.y * H, s.r, s.r);
+  }
+  ctx.translate(view.x, view.y);
+  ctx.scale(view.k, view.k);
+
+  for (const e of visible) {
+    const a = nodes[e.source], b = nodes[e.target];
+    const s = combined(e);
+    const active = touches(e, selected) || touches(e, hovered);
+    let alphaE = 0.14 + 0.6 * (s / 100);
+    if (searchHits && !(inSearch(a) && inSearch(b))) alphaE = 0.04;
+    if (selected && !active) alphaE *= 0.35;
+    ctx.globalAlpha = active ? Math.min(1, alphaE + 0.35) : alphaE;
+    ctx.strokeStyle = active ? "#cdd9ff" : "#5f7ec9";
+    ctx.lineWidth = ((0.6 + 2.4 * (s / 100)) / view.k) * (active ? 1.6 : 1);
+    ctx.setLineDash(e.metadata == null ? [5 / view.k, 5 / view.k] : []);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  ctx.textBaseline = "middle";
+  for (const n of nodes) {
+    const r = radius(n);
+    const lit = n === selected || n === hovered || (searchHits && searchHits.has(n.i));
+    ctx.globalAlpha = dimNode(n) ? 0.15 : 1;
+    ctx.fillStyle = colorOf(clusterOf[n.i]);
+    if (lit) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 18; }
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, 7);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (n === selected) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5 / view.k;
+      ctx.stroke();
+    }
+    if (!dimNode(n) && (view.k >= 1.1 || lit)) {
+      ctx.fillStyle = "#c9d6ff";
+      ctx.font = `${11 / view.k}px sans-serif`;
+      ctx.fillText(n.label, n.x + r + 4 / view.k, n.y);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function frame() {
+  if (alpha > 0.003) {
+    step();
+  } else if (!settledFit && !userAdjustedView) {
+    // One automatic fit once the layout first settles.
+    settledFit = true;
+    fit();
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// ---- interaction -----------------------------------------------------------
+const mouse = { dragNode: null, panning: false, moved: false, lastX: 0, lastY: 0 };
+
+function hit(wx, wy) {
+  const slack = 5 / view.k;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    const r = Math.max(radius(n), 7 / view.k) + slack;
+    const dx = n.x - wx, dy = n.y - wy;
+    if (dx * dx + dy * dy <= r * r) return n;
+  }
+  return null;
+}
+
+canvas.addEventListener("pointerdown", (ev) => {
+  const [wx, wy] = toWorld(ev.clientX, ev.clientY);
+  const n = hit(wx, wy);
+  mouse.moved = false;
+  mouse.lastX = ev.clientX;
+  mouse.lastY = ev.clientY;
+  if (n) { mouse.dragNode = n; n.fixed = true; }
+  else mouse.panning = true;
+  canvas.classList.add("dragging");
+  canvas.setPointerCapture(ev.pointerId);
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  const dx = ev.clientX - mouse.lastX, dy = ev.clientY - mouse.lastY;
+  if (mouse.dragNode || mouse.panning) {
+    if (Math.abs(dx) + Math.abs(dy) > 2) mouse.moved = true;
+  }
+  if (mouse.dragNode) {
+    const [wx, wy] = toWorld(ev.clientX, ev.clientY);
+    mouse.dragNode.x = wx;
+    mouse.dragNode.y = wy;
+    reheat(0.3);
+  } else if (mouse.panning && mouse.moved) {
+    view.x += dx; view.y += dy;
+    userAdjustedView = true;
+  } else {
+    const [wx, wy] = toWorld(ev.clientX, ev.clientY);
+    setHover(hit(wx, wy), ev.clientX, ev.clientY);
+  }
+  mouse.lastX = ev.clientX;
+  mouse.lastY = ev.clientY;
+});
+
+canvas.addEventListener("pointerup", () => {
+  canvas.classList.remove("dragging");
+  if (mouse.dragNode) {
+    mouse.dragNode.fixed = false;
+    if (!mouse.moved) select(mouse.dragNode);
+  } else if (mouse.panning && !mouse.moved) {
+    select(null);
+  }
+  mouse.dragNode = null;
+  mouse.panning = false;
+});
+
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const factor = Math.exp(-ev.deltaY * 0.0015);
+  const k = Math.min(8, Math.max(0.1, view.k * factor));
+  const [wx, wy] = toWorld(ev.clientX, ev.clientY);
+  view.x = ev.clientX - wx * k;
+  view.y = ev.clientY - wy * k;
+  view.k = k;
+  userAdjustedView = true;
+}, { passive: false });
+
+canvas.addEventListener("dblclick", fit);
+window.addEventListener("keydown", (ev) => { if (ev.key === "Escape") select(null); });
+
+// ---- tooltip ---------------------------------------------------------------
+function setHover(n, cx, cy) {
+  hovered = n;
+  const tip = el("tooltip");
+  if (!n) { tip.hidden = true; return; }
+  let h = `<div class="t-label">${esc(n.label)}</div><div class="kv">${esc(n.path)}</div>`;
+  if (n.uuid) h += `<div class="kv mono">${esc(n.uuid)}</div>`;
+  for (const [f, v] of n.meta.slice(0, 8)) h += `<div class="kv">${esc(f)}: ${esc(v)}</div>`;
+  tip.innerHTML = h;
+  tip.hidden = false;
+  tip.style.left = Math.min(cx + 14, W - 340) + "px";
+  tip.style.top = Math.min(cy + 14, H - 160) + "px";
+}
+
+// ---- details panel ---------------------------------------------------------
+const fmtPct = (x) => (x == null ? "—" : `${(+x).toFixed(1)}%`);
+
+function fieldTable(e) {
+  const src = nodes[e.source], tgt = nodes[e.target];
+  let rows = "";
+  for (const f of e.fields) {
+    const tag = f.scored ? "" : '<span class="tag">unscored</span>';
+    rows += `<tr>
+      <td>${esc(f.f)}${tag}</td>
+      <td class="state-${f.s}">${esc(f.r) || "—"}</td>
+      <td class="state-${f.s}">${esc(f.c) || "—"}</td>
+    </tr>`;
+  }
+  if (!rows) return "";
+  return `<details class="fields"><summary>${e.fields.length} metadata fields</summary>
+    <table class="diff">
+      <tr><th>field</th><th>${esc(src.label)}</th><th>${esc(tgt.label)}</th></tr>
+      ${rows}
+    </table></details>`;
+}
+
+function select(n) {
+  selected = n;
+  const panel = el("details");
+  if (!n) { panel.hidden = true; return; }
+  const inc = edges
+    .filter((e) => e.source === n.i || e.target === n.i)
+    .sort((a, b) => combined(b) - combined(a));
+  let h = `<button class="close" id="closeDetails">×</button>
+    <h2>${esc(n.label)}</h2>
+    <div class="kv">${esc(n.path)}</div>`;
+  if (n.uuid) h += `<div class="kv mono">${esc(n.uuid)}</div>`;
+  if (n.meta.length) {
+    h += `<ul class="metaList">` +
+      n.meta.map(([f, v]) => `<li>${esc(f)}: <b>${esc(v)}</b></li>`).join("") +
+      `</ul>`;
+  }
+  h += `<h3>${inc.length} match${inc.length === 1 ? "" : "es"}</h3>`;
+  for (const e of inc) {
+    const other = nodes[e.source === n.i ? e.target : e.source];
+    const s = combined(e);
+    h += `<div class="matchCard${s < threshold ? " below" : ""}">
+      <span class="mname" data-node="${other.i}">${esc(other.label)}</span>
+      <div class="scores">combined <b>${s.toFixed(1)}%</b> · geometry ${fmtPct(e.geometry)} ·
+        metadata ${e.metadata == null ? "—" : `${fmtPct(e.metadata)} (${e.matched}/${e.comparable})`}
+        ${s < threshold ? " · below threshold" : ""}</div>
+      ${e.url ? `<a class="cmp" href="${esc(e.url)}" target="_blank" rel="noopener">Open comparison ↗</a>` : ""}
+      ${fieldTable(e)}
+    </div>`;
+  }
+  panel.innerHTML = h;
+  panel.hidden = false;
+  el("closeDetails").onclick = () => select(null);
+  for (const link of panel.querySelectorAll(".mname")) {
+    link.onclick = () => select(nodes[+link.dataset.node]);
+  }
+}
+
+// ---- controls --------------------------------------------------------------
+function updateBlendLabel() {
+  const g = Math.round(blend * 100);
+  el("blendLabel").textContent = `${g}% geometry / ${100 - g}% metadata`;
+}
+function updateThresholdLabel() {
+  el("thresholdLabel").textContent = `${threshold}%`;
+}
+el("blend").addEventListener("input", (ev) => {
+  blend = ev.target.value / 100;
+  updateBlendLabel();
+  refilter();
+  reheat(0.5);
+  if (selected) select(selected);
+});
+el("threshold").addEventListener("input", (ev) => {
+  threshold = +ev.target.value;
+  updateThresholdLabel();
+  refilter();
+  reheat(0.5);
+  if (selected) select(selected);
+});
+el("search").addEventListener("input", (ev) => {
+  const term = ev.target.value.trim().toLowerCase();
+  searchHits = term
+    ? new Set(nodes
+        .filter((n) =>
+          n.label.toLowerCase().includes(term) ||
+          n.path.toLowerCase().includes(term) ||
+          (n.uuid || "").toLowerCase().includes(term))
+        .map((n) => n.i))
+    : null;
+});
+el("fit").addEventListener("click", () => { userAdjustedView = false; fit(); });
+
+// ---- init ------------------------------------------------------------------
+el("source").textContent = DATA.source;
+updateBlendLabel();
+updateThresholdLabel();
+refilter();
+if (!nodes.length) {
+  const empty = document.createElement("div");
+  empty.className = "panel";
+  empty.id = "empty";
+  empty.textContent = "This report contains no asset matches to draw.";
+  document.body.appendChild(empty);
+}
+fit();
+frame();
+</script>
+</body>
+</html>

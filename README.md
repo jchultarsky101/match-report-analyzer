@@ -3,13 +3,23 @@
 [![CI](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/jchultarsky101/match-report-analyzer/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-A small **command-line tool** that converts a
-[Physna](https://www.physna.com/) geometric **match-report** CSV export into a
-**color-highlighted Excel workbook** (`.xlsx`).
+A small **command-line tool** that analyzes a
+[Physna](https://www.physna.com/) geometric **match-report** CSV export and
+renders it for visual inspection:
 
-Each row of a match report pairs a *reference* asset with a *candidate* asset.
-The tool highlights, cell by cell, **where their metadata differs** so you can
-scan a large report visually instead of reading every value by hand.
+- `xlsx` — a **color-highlighted Excel workbook** that flags, cell by cell,
+  where each pair's metadata differs.
+- `graph` — an **interactive similarity-graph** ("constellation") in a single
+  self-contained HTML file, revealing clusters of similar assets across the
+  whole report.
+- `grid` — an **interactive data grid** in a single self-contained HTML file:
+  the Excel view as a page, plus search, sorting, SQL-like filtering, and
+  in-place "what-if" editing.
+
+Each row of a match report pairs a *reference* asset with a *candidate* asset,
+but the same asset can match many others — the report as a whole describes a
+graph, and both renderings help you scan it instead of reading every value by
+hand.
 
 > **Status:** early development (`0.1.0`).
 
@@ -102,20 +112,78 @@ cargo build --release
 # Binary at ./target/release/match-report-analyzer (.exe on Windows)
 ```
 
+## The data grid (`grid`)
+
+The `grid` subcommand renders the report as a single-page **data grid** that
+mirrors the Excel view — grouped `REF_`/`CAN_` pair headers, the same
+match/difference/missing cell colors, a heat-mapped `MATCH_PERCENTAGE`, frozen
+identity columns, and clickable comparison links — and adds live exploration
+for "what-if" analysis:
+
+- **Search** by asset name, path, or UUID.
+- **Sort** by any column (click a header; numeric-aware, blanks last).
+- **Filter** with a SQL-like `WHERE` expression combining rules across
+  columns — comparisons (`=`, `!=`, `<`, `<=`, `>`, `>=`), `LIKE` (`%`/`_`),
+  `IN (…)`, `BETWEEN … AND …`, `IS [NOT] NULL` (blank cell), joined with
+  `AND`/`OR`/`NOT` and parentheses. Columns can be compared to values or to
+  each other, e.g.
+  `MATCH_PERCENTAGE > 90 AND REF_XUNITS != CAN_XUNITS`. Numbers compare
+  numerically; names with symbols are quoted (`"REF__COST_($)" > 100`). A
+  built-in help panel lists the syntax, clickable examples, and every column.
+- **What-if edits** — double-click any cell to change its value; the pair is
+  re-classified and re-colored instantly and the match/differ/missing tallies
+  update, so you can test scenarios like "what if these units were
+  standardized?". Edited cells are outlined and one click resets everything.
+
+Like the graph, the output is one self-contained HTML file with no external
+dependencies — it works offline and can be shared as-is.
+
+## The similarity graph (`graph`)
+
+The `graph` subcommand analyzes the same report as a **graph**: every unique
+asset is a node (identified by its UUID when the report provides one, falling
+back to its path) and every match is an edge. The output is a single
+self-contained HTML file — no network access or external libraries needed — that
+renders an interactive, force-directed "constellation" in which clusters of
+mutually similar assets pull together:
+
+- **Two scores per match** — the geometric `MATCH_PERCENTAGE` from the report,
+  plus a **metadata-agreement score**: the percentage of *intrinsic* paired
+  fields (units, file type, state, size, cost, supplier, …) with equal values on
+  both sides. Identity and organizational fields (`XID`, folder, owner, name)
+  are shown in the details but never scored — they say where an asset lives, not
+  what it is.
+- **Adjustable blend** — a slider mixes the two scores into each edge's
+  combined strength (default 70% geometry / 30% metadata); stronger matches
+  pull nodes closer and draw brighter, thicker edges. Matches with no shared
+  metadata fall back to geometry alone and are drawn dashed.
+- **Filtering & exploration** — a minimum-score slider prunes weak edges (the
+  constellation re-forms live), a search box highlights assets by name, path,
+  or UUID, and nodes are colored by cluster and sized by match count.
+- **Details on click** — selecting an asset lists all its matches with both
+  scores, a field-by-field comparison table (colored like the Excel view), and
+  the clickable `COMPARISON_URL` deep link.
+
 ## Usage
 
+The tool is organized as subcommands, one per generated file type:
+
 ```sh
-match-report-analyzer <INPUT_CSV> <OUTPUT_XLSX>
+match-report-analyzer xlsx  <INPUT_CSV> <OUTPUT_XLSX>   # highlighted Excel workbook
+match-report-analyzer graph <INPUT_CSV> <OUTPUT_HTML>   # interactive similarity graph
+match-report-analyzer grid  <INPUT_CSV> <OUTPUT_HTML>   # interactive data grid
 ```
 
 For example:
 
 ```sh
-match-report-analyzer data/test-report.csv report.xlsx
+match-report-analyzer xlsx  data/test-report.csv report.xlsx
+match-report-analyzer graph data/test-report.csv constellation.html
+match-report-analyzer grid  data/test-report.csv grid.html
 ```
 
-Both arguments are required: the input match-report CSV and the path of the
-`.xlsx` file to create. The input file is only read, never modified.
+Each subcommand takes two required arguments: the input match-report CSV and
+the path of the file to create. The input file is only read, never modified.
 
 The input is validated before any work is done:
 
@@ -126,17 +194,17 @@ The input is validated before any work is done:
 A CSV with no `REF_`/`CAN_` metadata pairs is perfectly valid — it is still
 converted to a workbook normally, just with nothing to highlight.
 
-> The output is always written in the modern Excel `.xlsx` format. If you give
-> the output a different (or missing) extension — for example the legacy
-> `.xls` — the tool automatically corrects it to `.xlsx` (and logs a warning),
-> so Excel can open the file without an "extension doesn't match" warning.
+> Each subcommand writes exactly one format, keyed by extension (`.xlsx` or
+> `.html`). If you give the output a different (or missing) extension — for
+> example the legacy `.xls` — the tool automatically corrects it (and logs a
+> warning), so the reading application opens the file cleanly.
 
-Options:
+Options (global — accepted before or after the subcommand):
 
 | Flag | Description |
 | --- | --- |
 | `-v`, `--verbose` | Increase logging verbosity (`-v` = debug, `-vv` = trace) |
-| `-h`, `--help` | Print help |
+| `-h`, `--help` | Print help (also available per subcommand, e.g. `match-report-analyzer help xlsx`) |
 | `-V`, `--version` | Print version |
 
 Logging is powered by [`tracing`](https://crates.io/crates/tracing); set the
@@ -147,14 +215,22 @@ Logging is powered by [`tracing`](https://crates.io/crates/tracing); set the
 The crate is a thin CLI binary over a small, testable library:
 
 - `src/cli.rs` — argument parsing with [`clap`](https://crates.io/crates/clap)
-  (builder pattern).
+  (builder pattern), organized as subcommands (one per generated file type).
 - `src/report.rs` — reads the CSV, pairs `REF_`/`CAN_` columns, and classifies
   each cell as equal / different / missing.
 - `src/xlsx.rs` — writes the highlighted workbook with
   [`rust_xlsxwriter`](https://crates.io/crates/rust_xlsxwriter).
+- `src/graph.rs` — deduplicates assets into nodes, merges matches into
+  undirected edges, and scores geometry + metadata agreement.
+- `src/html.rs` / `src/html/template.html` — renders the graph into the
+  self-contained interactive document (vanilla JS, no external dependencies).
+- `src/grid.rs` / `src/html/grid_template.html` — renders the report as the
+  self-contained interactive data grid, including the SQL-like filter engine.
+- `src/json.rs` — minimal JSON serialization shared by the HTML renderers.
 - `src/error.rs` — error types built with
   [`thiserror`](https://crates.io/crates/thiserror).
-- `src/lib.rs` / `src/main.rs` — the `convert` entry point and the binary.
+- `src/lib.rs` / `src/main.rs` — the `convert_to_xlsx` / `convert_to_graph` /
+  `convert_to_grid` entry points and the binary.
 
 ## Development
 
