@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Both HTML views now share one dark "drafting instrument" design system:
+  night-blue surfaces with a faint blueprint grid, a crosshair nameplate
+  header, stat readout chips, copper accents, monospace instrument details,
+  and matching state colors (dark fills with vivid ink). The grid gained
+  brighter asset paths with the directory prefix muted and truncation moved
+  into the prefix so filenames always stay visible; the graph's panels,
+  controls, tooltip, and details tables were restyled to match, and its page
+  title is now "Similarity Graph".
+
 ## [0.2.0] - 2026-07-20
 
 ### Added
